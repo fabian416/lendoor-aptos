@@ -1,1 +1,2 @@
+evc/=lib/ethereum-vault-connector/src/
 evk/=lib/euler-vault-kit/src/

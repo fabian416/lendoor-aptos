@@ -3,9 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css"
 import type { Metadata } from "next"
 import { Inter, JetBrains_Mono, Geist_Mono } from "next/font/google"
-import { Header } from "@/components/Header";
+import { Header } from "@/components/common/Header";
 import { DynamicProvider } from "@/components/providers/DynamicProvider";
-import Background from "@/components/Background";
 import { Suspense } from "react";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" })

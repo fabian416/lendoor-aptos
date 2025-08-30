@@ -1,0 +1,80 @@
+'use client'
+
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { useIsLoggedIn, useDynamicContext } from '@dynamic-labs/sdk-react-core'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { SupplyPanel } from '@/components/lend/SupplyPanel'
+import { WithdrawsUSDCPanel } from '@/components/lend/WithdrawsUSDCPanel'
+import { WithdrawjUSDCPanel } from './WithdrawjUSDCPanel'
+
+type Tab = 'Supply' | 'Withdraw sUSDC' | 'Withdraw jUSDC'
+
+export function LendMarket() {
+  const [activeTab, setActiveTab] = useState<Tab>('Supply')
+  const isLoggedIn = useIsLoggedIn()
+  const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
+
+  // TODO: conectá con tus contracts
+  const handleSupply = (amt: string) => console.log('Supply amount:', amt)
+  const handleWithdraw = (amt: string) => console.log('Withdraw amount:', amt)
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="w-full max-w-md mx-auto space-y-3 px-4">
+        {/* Header Tabs */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1">
+              {(['Supply', 'Withdraw sUSDC', 'Withdraw jUSDC'] as Tab[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    activeTab === tab
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground cursor-pointer'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {!isLoggedIn && !loadingNetwork && (
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm px-4 py-2 cursor-pointer"
+              onClick={() => setShowAuthFlow(true)}
+            >
+              Connect Wallet
+            </Button>
+          )}
+        </div>
+
+        {activeTab === 'Supply' ? (
+          <SupplyPanel
+            isLoggedIn={!!isLoggedIn}
+            loadingNetwork={loadingNetwork}
+            onConnect={() => setShowAuthFlow(true)}
+            onSupply={handleSupply}
+          />
+        ) : activeTab === 'Withdraw sUSDC' ? (
+          <WithdrawsUSDCPanel
+            isLoggedIn={!!isLoggedIn}
+            loadingNetwork={loadingNetwork}
+            onConnect={() => setShowAuthFlow(true)}
+            onWithdraw={handleWithdraw}
+          />
+        ) :
+          <WithdrawjUSDCPanel
+            isLoggedIn={!!isLoggedIn}
+            loadingNetwork={loadingNetwork}
+            onConnect={() => setShowAuthFlow(true)}
+            onWithdraw={handleWithdraw}
+          />
+      }
+      </div>
+    </TooltipProvider>
+  )
+}

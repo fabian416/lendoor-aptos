@@ -1,11 +1,15 @@
 'use client'
 
-import { DynamicWidget, useIsLoggedIn, useDynamicContext } from "@dynamic-labs/sdk-react-core"
+import { useEffect, useState } from 'react'
+import { DynamicWidget, useIsLoggedIn, useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import Image from "next/image"
 
 export function Header() {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  
   return (
      <header className="border-b border-primary/20 bg-background/95 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
@@ -21,7 +25,13 @@ export function Header() {
               LEND
             </Link>
           </nav>
-          <DynamicWidget />
+          <div className="min-w-[200px] w-[200px] shrink-0 flex justify-end">
+          {mounted ? (
+            <DynamicWidget />
+          ) : (
+            <div className="h-10 w-full rounded-md border border-primary/20 bg-muted/40 animate-pulse" />
+          )}
+        </div>
         </div>
       </header>
   )

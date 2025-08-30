@@ -16,7 +16,7 @@ abstract contract RiskManagerUncollatModule is IRiskManager, LiquidityUtils {
     error E_InvalidAddress();
 
     // Default CLM address 
-    address internal constant DEFAULT_CLM = 0x2164C00409dE4F9b73EF6fa7365470Dd60f7F4bF;
+    address internal constant DEFAULT_CLM = 0xe42fDdeb988c6D59f767A366444Bd92770AA0352;
 
     // Storage in the VAULT (written via delegatecall)
     address private _creditLimitManager; // 0 = uses DEFAULT_CLM

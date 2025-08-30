@@ -532,6 +532,58 @@ interface IGovernance {
     function setInterestFee(uint16 newFee) external;
 }
 
+
+/// @title IJuniorTranche
+/// @notice Interface for the Junior Tranche (sUSD3) module
+interface IJuniorTranche {
+    /// @notice Returns the total supply of junior shares
+    /// @return Total supply of junior tranche shares
+    function jTotalSupply() external view returns (uint256);
+
+    /// @notice Returns the balance of junior shares for an account
+    /// @param account The account to query
+    /// @return Balance of junior tranche shares
+    function jBalanceOf(address account) external view returns (uint256);
+
+    /// @notice Convert assets to junior shares
+    /// @param assets Amount of assets
+    /// @return Amount of junior shares
+    function convertToJuniorShares(uint256 assets) external view returns (uint256);
+
+    /// @notice Convert junior shares to assets
+    /// @param jShares Amount of junior shares
+    /// @return Amount of assets
+    function convertToJuniorAssets(uint256 jShares) external view returns (uint256);
+
+    /// @notice Promote senior shares into junior tranche
+    /// @param seniorSharesIn Amount of senior shares to convert
+    /// @param to Recipient of junior shares
+    /// @return jSharesOut Amount of junior shares received
+    function promoteToJunior(uint256 seniorSharesIn, address to) external returns (uint256);
+
+    /// @notice Demote junior shares back into senior tranche
+    /// @param jSharesIn Amount of junior shares to convert
+    /// @param to Recipient of senior shares
+    /// @return seniorSharesOut Amount of senior shares received
+    function demoteToSenior(uint256 jSharesIn, address to) external returns (uint256);
+
+    ///@notice Preview functions for junior tranche operations
+    function previewDepositJunior(uint256 assets) external view returns (uint256);  // floor
+    function previewMintJunior(uint256 jShares) external view returns (uint256);     // assets up
+    function previewWithdrawJunior(uint256 assets) external view returns (uint256);  // shares up
+    function previewRedeemJunior(uint256 jShares) external view returns (uint256);   // assets down
+}
+
+/// Useful views for wrappers and UIs to avoid direct storage reads
+interface IVaultViews {
+    function availableCashAssets() external view returns (uint256);
+    function juniorCapacityLeftAssets() external view returns (uint256);
+
+    // Optional, useful for UIs and testing (if you add the getters in the module):
+    function psSeniorRay() external view returns (uint256);
+    function psJuniorRay() external view returns (uint256);
+}
+
 /// @title IEVault
 /// @custom:security-contact security@euler.xyz
 /// @author Euler Labs (https://www.eulerlabs.com/)
@@ -544,7 +596,9 @@ interface IEVault is
     ILiquidation,
     IRiskManager,
     IBalanceForwarder,
-    IGovernance
+    IGovernance,
+    IJuniorTranche,
+    IVaultViews
 {
     /// @notice Fetch address of the `Initialize` module
     function MODULE_INITIALIZE() external view returns (address);

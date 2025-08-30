@@ -29,6 +29,7 @@ export function RepayPanel({
 }: RepayPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
+  const { ready, value } = useUserJourney();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,6 +70,7 @@ export function RepayPanel({
                 type="submit"
                 className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
               >
+                {ready && (value === "repay") && <UserJourneyBadge/>}
                 {cta}
               </Button>
             </form>
@@ -77,7 +79,7 @@ export function RepayPanel({
           <div className="space-y-2 mb-2">
             <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground">
-                TX Cost <InfoTip label="Estimated gas for this repayment." variant="light" />
+                TX Cost <InfoTip label="Estimated gas for this repayment." contentClassName="font-display text-[11px] leading-snug" />
               </span>
               <span className="text-xs">-</span>
             </div>
@@ -86,7 +88,7 @@ export function RepayPanel({
                 Repayment Type{' '}
                 <InfoTip
                   label="Depending on market settings, repayments may prioritize interest → principal."
-                  variant="light"
+                  contentClassName="font-display text-[11px] leading-snug"
                 />
               </span>
               <span className="text-xs">Interest first</span>
@@ -126,7 +128,8 @@ export function RepayPanel({
                   <div className="flex items-center gap-2">
                     <span className="text-xs">🔗</span>
                     <span className="text-xs">Onchain</span>
-                    <InfoTip label="Verified on-chain assets used as backing." variant="light" />
+                    
+                    <InfoTip label="Verified on-chain assets used as backing." contentClassName="font-display text-[11px] leading-snug" />
                   </div>
                   <span className="text-xs">$0</span>
                 </div>

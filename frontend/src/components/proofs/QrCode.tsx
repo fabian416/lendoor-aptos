@@ -8,15 +8,23 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { ArrowLeft, ShieldCheck, Link as LinkIcon, Clock, Copy, RefreshCw } from 'lucide-react'
+import { backendUri } from '@/lib/constants'
+import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 
 type QRCodeViewProps = {
   onBack: () => void
-  /** UI copy / config */
   appName?: string
   logoUrl?: string
   purpose?: string
   scope?: string
   devMode?: boolean
+}
+
+type BackendVerifyResponse = {
+  verified: boolean
+  user: {
+    creditLimit?: number | string | null
+  }
 }
 
 export function QRCodeView({
@@ -31,6 +39,17 @@ export function QRCodeView({
   const [requestId, setRequestId] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
 
+  const [submitting, setSubmitting] = useState(false)
+  const [verified, setVerified] = useState<boolean | null>(null)
+  const [creditLimit, setCreditLimit] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const { primaryWallet } = useDynamicContext()
+  const wallet = useMemo(
+    () => (primaryWallet as any)?.address?.toLowerCase?.() ?? '',
+    [primaryWallet],
+  )
+
   const zkpassportRef = useRef<ZKPassport | null>(null)
   const proofRef = useRef<any | null>(null)
 
@@ -39,6 +58,9 @@ export function QRCodeView({
     setLoading(true)
     setUrl(null)
     setRequestId(null)
+    setError(null)
+    setVerified(null)
+    setCreditLimit(null)
     proofRef.current = null
 
     try {
@@ -64,7 +86,7 @@ export function QRCodeView({
         onReject,
         onError,
       } = qb
-        // —— Example disclosures / checks; ajustá a tu flujo real:
+        // Example disclosures / checks; adjust to your real flow
         .disclose('firstname')
         .disclose('lastname')
         .disclose('birthdate')
@@ -79,8 +101,7 @@ export function QRCodeView({
       setLoading(false)
 
       onRequestReceived(() => {
-        // user received request in app
-        // console.log('Request received')
+        // optional: request received
       })
       onGeneratingProof(() => {
         setLoading(true)
@@ -89,37 +110,76 @@ export function QRCodeView({
         proofRef.current = proof
       })
       onResult(async ({ verified, result }) => {
-          console.log('🎯 Result received:', result);
+        // Keep waiting for backend verification; do not navigate away
+        if (!proofRef.current) {
+          setLoading(false)
+          setVerified(false)
+          setError('Missing proof. Please try again.')
+          return
+        }
 
-          if (!verified || !proofRef.current) {
-            console.error('❌ Proof verification failed or proof missing');
-            setLoading(false);
-            return;
+        if (!wallet) {
+          setLoading(false)
+          setVerified(false)
+          setError('Connect your wallet to continue.')
+          return
+        }
+
+        try {
+          setSubmitting(true)
+          setError(null)
+
+          const res = await fetch(`${backendUri}/zkpassport/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              walletAddress: wallet,
+              requestId,
+              proof: proofRef.current,
+              result,
+            }),
+          })
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            throw new Error(text || `Backend verify failed (${res.status})`)
           }
 
-          const passportData = {
-              firstname: result.firstname?.disclose?.result ?? '',
-              lastname: result.lastname?.disclose?.result ?? '',
-              birthdate: result.birthdate?.disclose?.result ?? '',
-              nationality: result.nationality?.disclose?.result ?? '',
-              documentType: result.document_type?.disclose?.result ?? '',
-              documentNumber: result.document_number?.disclose?.result ?? '',
-          };
-          console.log(passportData);
-          setLoading(false);
-          onBack();
-      });
+          const data: BackendVerifyResponse = await res.json()
+          setVerified(Boolean(data.verified))
+
+          const clRaw = data?.user?.creditLimit
+          const cl =
+            typeof clRaw === 'number'
+              ? clRaw
+              : clRaw != null
+              ? Number(clRaw as any)
+              : null
+          setCreditLimit(Number.isFinite(cl as number) ? (cl as number) : null)
+        } catch (e: any) {
+          setVerified(false)
+          setError(e?.message ?? 'Error submitting proof to backend.')
+        } finally {
+          setSubmitting(false)
+          setLoading(false)
+        }
+      })
       onReject(() => {
-        // user rejected; keep QR so they can try again
         setLoading(false)
+        setVerified(false)
+        setError('Request rejected in the app. Try again.')
       })
       onError((_err) => {
         setLoading(false)
+        setVerified(false)
+        setError('An error occurred during proof generation.')
       })
     } catch (_e) {
       setLoading(false)
+      setVerified(false)
+      setError('Failed to initialize zkPassport.')
     }
-  }, [appName, logoUrl, purpose, scope, devMode])
+  }, [appName, logoUrl, purpose, scope, devMode, wallet])
 
   useEffect(() => {
     generateQR()

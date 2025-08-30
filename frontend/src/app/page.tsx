@@ -7,9 +7,9 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       <main className="max-w-3xl mx-auto px-6 relative z-10">
-        <section className="py-10 md:py-15 text-center">
+        <section className="py-15 text-center">
           <div className="mb-16">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-primary mono-text mb-6 tracking-tight glitch-effect">
+            <h1 className="text-4xl lg:text-5xl font-bold text-primary mono-text mb-6 tracking-tight glitch-effect">
               THE REPUTATION-BASED MONEY MARKET
             </h1>
             <p className="text-lg md:text-xl text-primary mono-text mb-8 tracking-wide">

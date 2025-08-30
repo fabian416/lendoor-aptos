@@ -8,10 +8,12 @@ const nextConfig: NextConfig = {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       buffer: require.resolve("buffer/"),
+      process: require.resolve('process/browser'),
     };
     config.plugins.push(
       new webpack.ProvidePlugin({
         Buffer: ["buffer", "Buffer"],
+        process: ['process'],
       })
     );
     return config;

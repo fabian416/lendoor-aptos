@@ -33,6 +33,7 @@ export function WithdrawsUSDCPanel({
 }: WithdrawPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
+  const { ready, value } = useUserJourney();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,6 +69,7 @@ export function WithdrawsUSDCPanel({
             type="submit"
             className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
             >
+            {ready && (value === "withdraw_susdc") && <UserJourneyBadge/>}
             {cta}
             </Button>
         </form>

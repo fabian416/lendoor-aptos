@@ -16,7 +16,7 @@ export function LendMarket() {
   const [activeTab, setActiveTab] = useState<Tab>('Supply')
   const isLoggedIn = useIsLoggedIn()
   const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
-  const { ready,  } = useUserJourney();
+  const { ready, value } = useUserJourney();
 
   // TODO: conectá con tus contracts
   const handleSupply = (amt: string) => console.log('Supply amount:', amt)
@@ -39,6 +39,11 @@ export function LendMarket() {
                       : 'text-muted-foreground hover:text-foreground cursor-pointer'
                   }`}
                 >
+
+                  {ready && value == "supply_liquidity" && activeTab != tab && tab == "Supply" && <UserJourneyBadge />}
+                  {ready && value == "withdraw_susdc" && activeTab != tab && tab == "Withdraw sUSDC" && <UserJourneyBadge />}
+                  {ready && value == "withdraw_jusdc" && activeTab != tab && tab == "Withdraw jUSDC" && <UserJourneyBadge />}
+                  &nbsp;&nbsp;
                   {tab}
                 </button>
               ))}

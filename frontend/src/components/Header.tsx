@@ -1,25 +1,28 @@
 'use client'
 
-import { useEffect, useState } from "react"
-import { Wallet } from "lucide-react"
 import { DynamicWidget, useIsLoggedIn, useDynamicContext } from "@dynamic-labs/sdk-react-core"
-import { useRouter, usePathname } from "next/navigation"
-import { Lock, Github, Twitter } from "lucide-react"
-import { Button } from "./ui/button"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
 import Image from "next/image"
 
-const Header = () => {
+export function Header() {
   return (
-      <header className="flex items-center justify-between p-2 lg:p-4">
-          <div className="flex items-center space-x-3 px-4">
-            <Image src="/logo-transparent.png" width={140} height={100} alt="logo" />
-          </div>
-
-          <div className="flex items-center space-x-4 px-4">
-            <DynamicWidget />
-          </div>
-        </header>
+     <header className="border-b border-primary/20 bg-background/95 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <Link href="/" className="group focus:outline-none flex justify-center align-center gap-3">
+            <Image src="/favicon.png" alt="favicon" width={15} height={15} className="h-7 w-7 shrink-0 object-contain" />
+            <div className="text-2xl font-bold text-primary mono-text terminal-cursor">LENDOOR</div>
+          </Link>
+          <nav className="hidden md:flex space-x-8 mono-text">
+          <Link href="/borrow" className="text-muted-foreground hover:text-primary terminal-hover px-2 py-1 text-sm">
+              BORROW
+            </Link>
+            <Link href="/lend" className="text-muted-foreground hover:text-primary terminal-hover px-2 py-1 text-sm">
+              LEND
+            </Link>
+          </nav>
+          <DynamicWidget />
+        </div>
+      </header>
   )
 }
-
-export default Header

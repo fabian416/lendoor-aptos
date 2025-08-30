@@ -271,6 +271,26 @@ abstract contract VaultModule is IVault, AssetTransfers, BalanceUtils {
         }
     }
 
+    // ====== DEBUG VIEWS (external view, read-only) ======
+    function debugSnapshot() external view returns (uint64 lastAccrualTs, uint256 lastAssetsSnap) {
+        return (vaultStorage.lastAccrualTs, vaultStorage.lastAssetsSnap);
+    }
+    function debugSupplies() external view returns (uint256 senSupply, uint256 junSupply) {
+        return (vaultStorage.totalShares.toUint(), vaultStorage.totalSharesJunior.toUint());
+    }
+    function debugPps() external view returns (uint256 psSen, uint256 psJun) {
+        return (vaultStorage.psSeniorRay, vaultStorage.psJuniorRay);
+    }
+    function debugPoolNAVs() external view returns (uint256 gross, uint256 net) {
+        VaultCache memory v = loadVault();
+
+        gross = totalAssetsInternal(v);
+        net   = _poolNAVNet(v);
+    }
+    function debugExternalFlow() external view returns (int256) {
+        return vaultStorage.netExternalFlowAssets; // if you implement the accumulator
+    }
+
     /// -------------------------------------------------------------------------
 
     function _assetsToSeniorSharesDown(Assets assets) internal view returns (Shares) {

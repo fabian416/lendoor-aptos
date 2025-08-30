@@ -1,1 +1,1 @@
-export const backendUri = process.env.NEXT_PUBLIC_BACKEND_URI || "http://localhost:5001"
+export const backendUri = import.meta.env.VITE_PUBLIC_BACKEND_URL ?? "http://localhost:5001";

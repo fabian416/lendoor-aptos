@@ -108,8 +108,10 @@ export function QRCodeView({
       })
       onProofGenerated((proof) => {
         proofRef.current = proof
+        console.log("asd")
       })
       onResult(async ({ verified, result }) => {
+        console.log("asddsadsa")
         // Keep waiting for backend verification; do not navigate away
         if (!proofRef.current) {
           setLoading(false)

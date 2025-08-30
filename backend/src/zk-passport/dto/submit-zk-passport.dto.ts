@@ -1,18 +1,17 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+// dto/submit-zk-passport.dto.ts
+import { IsString, IsNotEmpty, ValidateNested, IsArray, IsOptional, Allow } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class VerificationDto {
+  @IsArray() proofs: any[];
+  @Allow() @IsOptional() queryResult?: Record<string, any>;
+}
 
 export class SubmitZkPassportDto {
-  @IsString()
-  @IsNotEmpty()
-  walletAddress!: string;
+  @IsString() walletAddress: string;
+  @IsString() requestId: string;
 
-  @IsString()
-  @IsOptional()
-  requestId?: string;
-
-  // La prueba cruda del SDK (estructura opaca para nosotros)
-  proof!: unknown;
-
-  // Resultado con disclosures (lo mapeamos a User)
-  // Tip: podés tiparlo mejor si tenés el shape del SDK
-  result?: Record<string, any>;
+  @ValidateNested()
+  @Type(() => VerificationDto)
+  verification: VerificationDto;
 }

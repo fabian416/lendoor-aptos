@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '../common/CenteredAmountInput'
 import { Card } from '@/components/ui/card'
-import { ChevronDown, ChevronUp, Info } from 'lucide-react'
+import { ChevronDown, ChevronUp, Info, ShieldCheck } from 'lucide-react'
 import { BorrowLimitKPI } from '../kpi/Limit'
 import { CreditScoreKPI } from '../kpi/Score'
 import { BaseApyKPI } from '../kpi/BaseAPY'
@@ -31,8 +31,7 @@ export function PullPanel({
 }: PullPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
-  const { ready, value } = useUserJourney();
-  console.log(value)
+  const { ready, value, isVerified } = useUserJourney();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,6 +60,14 @@ export function PullPanel({
             <span className="text-xs text-muted-foreground font-mono">
               BORROW BANK-FREE
             </span>
+
+            {/* 👇 Badge de identidad verificada */}
+            {isVerified && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[11px] font-semibold">
+                <ShieldCheck className="w-3 h-3" />
+                Identity Verified
+              </span>
+            )}
           </div>
           <div className="mb-4">
             {/* form ahora ocupa todo el ancho */}

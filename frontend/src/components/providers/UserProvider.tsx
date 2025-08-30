@@ -107,6 +107,7 @@ export function UserJourneyProvider({
       const res = await fetch(`${backendUri}/user-journey/${wallet}`);
       if (!res.ok) throw new Error(`GET /user-journey/${wallet} → ${res.status}`);
       const data: { walletAddress: string; step: unknown; isVerified?: boolean } = await res.json();
+      console.log(isVerified);
       setValue(isUserJourney(data.step) ? data.step : DEFAULT_JOURNEY);
       setIsVerified(Boolean(data.isVerified));
     } catch (e: any) {

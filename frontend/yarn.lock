@@ -5399,10 +5399,10 @@
     "@zkpassport/utils" "0.22.5"
     debug "^4.4.0"
 
-"@zkpassport/sdk@^0.8.2":
-  version "0.8.2"
-  resolved "https://registry.yarnpkg.com/@zkpassport/sdk/-/sdk-0.8.2.tgz#b02f224f5e4937fa4c0c11dfa886c33e2b305a02"
-  integrity sha512-7vOAaVNPsbWAIJeN8d5pwjqJ8DeUz4c/dOc8MPLWhRXUgWsGOlUurLvDngn4cFpA0sJkxWXqUOtPU4tTLFUWXg==
+"@zkpassport/sdk@0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@zkpassport/sdk/-/sdk-0.8.0.tgz#680d3f296bebab3c7b21a28074bb1dc42a6f38cb"
+  integrity sha512-Qcxizr6YZJXbBJ4WtXkYM64iY6g4OOfN9hSEzGLb6uNkFAihWNt+RH6oJzoArBY6tZCC2xh6Alsn8XKduNOKqw==
   dependencies:
     "@aztec/bb.js" "1.0.0-nightly.20250723"
     "@noble/ciphers" "^1.2.1"
@@ -5410,7 +5410,7 @@
     "@noble/secp256k1" "^2.2.3"
     "@obsidion/bridge" "^0.10.4"
     "@zkpassport/registry" "0.10.2"
-    "@zkpassport/utils" "0.22.7"
+    "@zkpassport/utils" "0.22.6"
     buffer "^6.0.3"
     i18n-iso-countries "^7.12.0"
     pako "^2.1.0"
@@ -5438,10 +5438,10 @@
     date-fns "^4.1.0"
     i18n-iso-countries "^7.13.0"
 
-"@zkpassport/utils@0.22.7":
-  version "0.22.7"
-  resolved "https://registry.yarnpkg.com/@zkpassport/utils/-/utils-0.22.7.tgz#6999ee00ed4eabdca308e60721ca51df2d84a3f2"
-  integrity sha512-TdvFH35WQF0L9N+uzutYZ8PKvRHED/7EAomS+jWoWtNms4jS7l976s7Lu7zZt0flaOiSOeupFZMQGmmEWb8vcw==
+"@zkpassport/utils@0.22.6":
+  version "0.22.6"
+  resolved "https://registry.yarnpkg.com/@zkpassport/utils/-/utils-0.22.6.tgz#e161b8da1a4ae3154f7ca304162e44a8bdc3a17c"
+  integrity sha512-9C/NZWt9hoQWs5w1d6TQUf4r8wBMD3E2ZJi8N2REuDQxKjs9C66a70YIqj6em5Sh2XDEqVRzkXT5o2r+tjv4Yw==
   dependencies:
     "@lapo/asn1js" "^2.0.4"
     "@noble/ciphers" "^1.0.0"

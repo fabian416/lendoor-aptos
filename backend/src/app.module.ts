@@ -1,10 +1,12 @@
+// app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { User } from './entities/user.entity';
 import { UserJourneyModule } from './user-journey/user-journey.module';
 import { ZkPassportModule } from './zk-passport/zk-passport.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -12,13 +14,15 @@ import { ZkPassportModule } from './zk-passport/zk-passport.module';
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: 'database.sqlite',
-      autoLoadEntities: true,
       synchronize: true,
+      migrationsRun: true,
+      entities: [User],
+      logging: ['error', 'warn'],
     }),
     UserJourneyModule,
     ZkPassportModule,
   ],
-  controllers: [],
+  controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}

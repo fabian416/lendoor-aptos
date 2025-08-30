@@ -15,8 +15,11 @@ struct UserStorage {
     // Snapshot of the interest accumulator from the last change to account's liability
     uint256 interestAccumulator;
     // A mapping with allowances for the vault shares token (eToken)
-    mapping(address spender => uint256 allowance) eTokenAllowance;
+    mapping(address => uint256) eTokenAllowance;
+    // Added to manage new states for junior vaults
+    Shares juniorBalance;
 }
+
 
 /// @title UserStorageLib
 /// @custom:security-contact security@euler.xyz

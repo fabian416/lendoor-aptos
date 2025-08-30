@@ -203,10 +203,16 @@ export function QRCodeView({
           <ShieldCheck className="w-4 h-4 text-primary" />
           <h2 className="text-lg font-semibold">zkPassport</h2>
           <InfoTip
-            label={<div className="max-w-xs text-[11px] leading-snug">
-              <div className="font-semibold mb-1">What is this?</div>
-              Scan with your zkPassport app to generate a zero-knowledge proof.
-            </div>}
+            label={
+              <div className="max-w-xs">
+                <div className="font-semibold mb-1">Privacy</div>
+                <div className="text-[11px] leading-snug">
+                    We verify your zk proof and link selected passport attributes to your wallet to
+                    assess eligibility. Personal data stays off-chain; only minimal attestations are
+                    written on-chain.
+                </div>
+              </div>
+            }
             contentClassName="font-display text-[11px] leading-snug"
           />
         </div>
@@ -223,7 +229,23 @@ export function QRCodeView({
 
         <div className="mb-2 text-center">
           <h3 className="text-xl font-bold mb-2">Verify with zkPassport</h3>
-          <p className="text-sm text-muted-foreground">Scan the code with the zkPassport mobile app.</p>
+          <p className="text-sm text-muted-foreground">
+            Not registered? Scan this code with your zkPassport mobile app to create a proof and
+            link it to your wallet. This helps us build your reputation-based credit score.&nbsp;
+            <InfoTip
+            label={
+              <div className="max-w-xs">
+                <div className="font-semibold mb-1">What is this?</div>
+                <div className="text-[11px] leading-snug">
+                  Scan with your zkPassport app to generate a zero-knowledge proof. We’ll link it to
+                  your Ethereum account to bootstrap a reputation-based credit score—without
+                  revealing your private data.
+                </div>
+              </div>
+            }
+            contentClassName="font-display text-[11px] leading-snug"
+          />
+          </p>
         </div>
 
         {/* QR */}

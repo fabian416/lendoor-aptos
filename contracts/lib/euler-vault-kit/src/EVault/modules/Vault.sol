@@ -271,7 +271,7 @@ abstract contract VaultModule is IVault, AssetTransfers, BalanceUtils {
         }
     }
 
-    // ====== DEBUG VIEWS (external view, read-only) ======
+    // ----------  DEBUG VIEWS (external view, read-only) ----------
     function debugSnapshot() external view returns (uint64 lastAccrualTs, uint256 lastAssetsSnap) {
         return (vaultStorage.lastAccrualTs, vaultStorage.lastAssetsSnap);
     }

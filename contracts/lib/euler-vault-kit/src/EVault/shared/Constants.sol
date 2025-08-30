@@ -20,8 +20,15 @@ uint256 constant MAX_ALLOWED_INTEREST_RATE = 291867278914945094175;
 // max valid value of the ConfigAmount custom type, signifying 100%
 uint16 constant CONFIG_SCALE = 1e4;
 
-// Account status checks special values
+// ----------------------------------------------------------------------------------------
+// Tranche accrual (waterfall senior-first) - quick path con constants
+// ----------------------------------------------------------------------------------------
 
+// max valid value of the ConfigAmount custom type, signifying 100% in ray precision
+uint256 constant ONE_RAY = 1e27;
+uint256 constant SENIOR_RATE_PER_SEC_RAY = (10e25) / SECONDS_PER_YEAR;
+
+// Account status checks special values
 // no account status checks should be scheduled
 address constant CHECKACCOUNT_NONE = address(0);
 // account status check should be scheduled for the authenticated account

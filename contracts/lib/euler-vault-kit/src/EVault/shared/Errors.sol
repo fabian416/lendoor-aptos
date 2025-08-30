@@ -56,4 +56,5 @@ contract Errors {
     error E_LTVBorrow();
     error E_LTVLiquidation();
     error E_NotHookTarget();
+    error E_JuniorTrancheCapExceeded();
 }

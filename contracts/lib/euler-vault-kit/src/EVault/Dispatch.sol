@@ -11,7 +11,7 @@ import {LiquidationModule} from "./modules/Liquidation.sol";
 import {InitializeModule} from "./modules/Initialize.sol";
 import {BalanceForwarderModule} from "./modules/BalanceForwarder.sol";
 import {GovernanceModule} from "./modules/Governance.sol";
-import {RiskManagerModule} from "./modules/RiskManager.sol";
+import {RiskManagerUncollatModule} from "../../../../src/Vault/RiskManagerUncollat.sol";
 
 import {AddressUtils} from "./shared/lib/AddressUtils.sol";
 import "./shared/Constants.sol";
@@ -26,7 +26,7 @@ abstract contract Dispatch is
     VaultModule,
     BorrowingModule,
     LiquidationModule,
-    RiskManagerModule,
+    RiskManagerUncollatModule,
     BalanceForwarderModule,
     GovernanceModule
 {
@@ -46,7 +46,7 @@ abstract contract Dispatch is
     address public immutable MODULE_BALANCE_FORWARDER;
     /// @notice Address of the Governance module
     address public immutable MODULE_GOVERNANCE;
-
+    
     /// @title DeployedModules
     /// @notice This struct is used to pass in the addresses of EVault modules during deployment
     struct DeployedModules {

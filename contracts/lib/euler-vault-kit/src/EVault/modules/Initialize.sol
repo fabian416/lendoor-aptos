@@ -51,13 +51,17 @@ abstract contract InitializeModule is IInitialize, BorrowUtils {
         // all operations are initially disabled
         vaultStorage.hookedOps = Flags.wrap(OP_MAX_VALUE - 1);
 
-        {
-            string memory underlyingSymbol = getTokenSymbol(address(asset));
-            uint256 seqId = sequenceRegistry.reserveSeqId(underlyingSymbol);
+        vaultStorage.symbol = "sUSD";
+        vaultStorage.name   = "Senior USD";
 
-            vaultStorage.symbol = string(abi.encodePacked("e", underlyingSymbol, "-", uintToString(seqId)));
-            vaultStorage.name = string(abi.encodePacked("EVK Vault ", vaultStorage.symbol));
-        }
+        // --- Tranches init ---
+        require(vaultStorage.psSeniorRay == 0 && vaultStorage.psJuniorRay == 0, "Tranches already inited");
+        vaultStorage.psSeniorRay = 1e27;
+        vaultStorage.psJuniorRay = 1e27;
+        vaultStorage.totalSharesJunior = Shares.wrap(0);
+        vaultStorage.lastAssetsSnap   = 0;
+        vaultStorage.lastAccrualTs    = uint64(block.timestamp);
+        // --- End ---
 
         snapshot.reset();
 

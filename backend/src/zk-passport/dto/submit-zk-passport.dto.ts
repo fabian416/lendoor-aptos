@@ -1,17 +1,12 @@
-// dto/submit-zk-passport.dto.ts
-import { IsString, IsNotEmpty, ValidateNested, IsArray, IsOptional, Allow } from 'class-validator';
-import { Type } from 'class-transformer';
-
-class VerificationDto {
-  @IsArray() proofs: any[];
-  @Allow() @IsOptional() queryResult?: Record<string, any>;
-}
+// submit-zk-passport.dto.ts
+import { IsString, IsNotEmpty, IsOptional, Allow } from 'class-validator';
 
 export class SubmitZkPassportDto {
   @IsString() walletAddress: string;
   @IsString() requestId: string;
+  @IsNotEmpty() proof: unknown;
 
-  @ValidateNested()
-  @Type(() => VerificationDto)
-  verification: VerificationDto;
+  @Allow() 
+  @IsOptional()
+  result?: Record<string, any>;
 }

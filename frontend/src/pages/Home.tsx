@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ArrowRight, Terminal, Database } from "lucide-react"
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 export default function Home() {
   return (
@@ -20,7 +20,7 @@ export default function Home() {
               size="lg"
               className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 py-4 mono-text text-lg tracking-wide border border-primary/50"
             >
-              <Link href="/borrow">
+              <Link to="/borrow">
                 LAUNCH APP
               </Link>
               <ArrowRight className="ml-2 w-5 h-5" />
@@ -46,7 +46,7 @@ export default function Home() {
         <section className="py-16 mb-20">
           <div className="grid md:grid-cols-2 gap-8">
 
-             <Link href="/borrow" className="block group focus:outline-none">
+             <Link to="/borrow" className="block group focus:outline-none">
               <Card className="data-card p-8 terminal-hover">
                 <div className="flex items-center mb-6">
                   <Database className="w-6 h-6 text-primary mr-3" />
@@ -72,7 +72,7 @@ export default function Home() {
               </Card>
             </Link>
 
-            <Link href="/lend" className="block group focus:outline-none">
+            <Link to="/lend" className="block group focus:outline-none">
               <Card className="data-card p-8 terminal-hover">
                 <div className="flex items-center mb-6">
                   <Terminal className="w-6 h-6 text-primary mr-3" />

@@ -51,15 +51,8 @@ abstract contract InitializeModule is IInitialize, BorrowUtils {
         // all operations are initially disabled
         vaultStorage.hookedOps = Flags.wrap(OP_MAX_VALUE - 1);
 
-        {
-        {
-        
-            // uint256 seqId = sequenceRegistry.reserveSeqId("sUSD");
-
-            // Hardcode
-            vaultStorage.symbol = "sUSD";
-            vaultStorage.name   = "Senior USD";
-        }
+        vaultStorage.symbol = "sUSD";
+        vaultStorage.name   = "Senior USD";
 
         // --- Tranches init ---
         require(vaultStorage.psSeniorRay == 0 && vaultStorage.psJuniorRay == 0, "Tranches already inited");

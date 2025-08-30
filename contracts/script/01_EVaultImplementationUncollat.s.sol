@@ -34,11 +34,8 @@ contract EVaultImplementationUncollat is Script {
         Base.Integrations memory integrations;
 
         // Read input JSON from /script
-        string memory inFile  = "01_EVaultImplementation_input.json";
-        string memory outFile = "01_EVaultImplementation_output.json";
-        string memory json = vm.readFile(
-            string.concat(vm.projectRoot(), "/script/", inFile)
-        );
+        string memory outFile = "script/01_EVaultImplementation_output.json";
+        string memory json = vm.envString("INPUT_JSON");
 
         integrations.evc              = vm.parseJsonAddress(json, ".evc");
         integrations.protocolConfig   = vm.parseJsonAddress(json, ".protocolConfig");
@@ -61,7 +58,7 @@ contract EVaultImplementationUncollat is Script {
         moduleVault            = m.vault;
 
         // Write output JSON in /script
-        string memory outPath = string.concat(vm.projectRoot(), "/script/", outFile);
+        string memory outPath = outFile;
 
         string memory mods;
         mods = vm.serializeAddress("modules", "balanceForwarder", m.balanceForwarder);

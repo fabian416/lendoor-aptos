@@ -7,9 +7,7 @@ import {GenericFactory} from "evk/GenericFactory/GenericFactory.sol";
 contract EVaultDeployer is Script {
     function run() public returns (address eVault) {
         // Read the input
-        string memory json = vm.readFile(
-            string.concat(vm.projectRoot(), "/script/07_EVault_input.json")
-        );
+        string memory json = vm.envString("INPUT_JSON");
 
         // Like deployRouterForOracle = false, we ignore oracleRouterFactory
         address eVaultFactory = vm.parseJsonAddress(json, ".eVaultFactory");

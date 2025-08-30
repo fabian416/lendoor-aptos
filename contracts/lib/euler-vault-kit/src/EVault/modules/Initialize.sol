@@ -59,6 +59,15 @@ abstract contract InitializeModule is IInitialize, BorrowUtils {
             vaultStorage.name = string(abi.encodePacked("EVK Vault ", vaultStorage.symbol));
         }
 
+        // --- Tranches init ---
+        require(vaultStorage.psSeniorRay == 0 && vaultStorage.psJuniorRay == 0, "Tranches already inited");
+        vaultStorage.psSeniorRay = 1e27;
+        vaultStorage.psJuniorRay = 1e27;
+        vaultStorage.totalSharesJunior = Shares.wrap(0);
+        vaultStorage.lastAssetsSnap   = 0;
+        vaultStorage.lastAccrualTs    = uint64(block.timestamp);
+        // --- End ---
+
         snapshot.reset();
 
         // Emit logs

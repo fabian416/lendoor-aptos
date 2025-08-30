@@ -271,6 +271,62 @@ abstract contract VaultModule is IVault, AssetTransfers, BalanceUtils {
         }
     }
 
+    /// -------------------------------------------------------------------------
+
+    function _assetsToSeniorSharesDown(Assets assets) internal view returns (Shares) {
+        uint256 ps = vaultStorage.psSeniorRay;
+        if (ps == 0) return Shares.wrap(0);
+        uint256 s = (assets.toUint() * ONE_RAY) / ps; // floor
+        return Shares.wrap(uint112(s));
+    }
+
+    function _assetsToSeniorSharesUp(Assets assets) internal view returns (Shares) {
+        uint256 ps = vaultStorage.psSeniorRay;
+        if (ps == 0) return Shares.wrap(0);
+        uint256 num = assets.toUint() * ONE_RAY;
+        uint256 s = (num + ps - 1) / ps; // ceil
+        return Shares.wrap(uint112(s));
+    }
+
+    function _seniorSharesToAssetsDown(Shares shares) internal view returns (Assets) {
+        uint256 a = (shares.toUint() * vaultStorage.psSeniorRay) / ONE_RAY; // floor
+        return Assets.wrap(uint112(a));
+    }
+
+    function _seniorSharesToAssetsUp(Shares shares) internal view returns (Assets) {
+        uint256 ps = vaultStorage.psSeniorRay;
+        uint256 num = shares.toUint() * ps;
+        uint256 a = (num + ONE_RAY - 1) / ONE_RAY; // ceil
+        return Assets.wrap(uint112(a));
+    }
+
+    function _assetsToJuniorSharesDown(Assets a) internal view returns (Shares) {
+        uint256 ps = vaultStorage.psJuniorRay;
+        if (ps == 0) return Shares.wrap(0);
+        uint256 s = (a.toUint() * ONE_RAY) / ps; // floor
+        return Shares.wrap(uint112(s));
+    }
+
+    function _assetsToJuniorSharesUp(Assets a) internal view returns (Shares) {
+        uint256 ps = vaultStorage.psJuniorRay;
+        if (ps == 0) return Shares.wrap(0);
+        uint256 num = a.toUint() * ONE_RAY;
+        uint256 s = (num + ps - 1) / ps; // ceil
+        return Shares.wrap(uint112(s));
+    }
+
+    function _juniorSharesToAssetsDown(Shares j) internal view returns (Assets) {
+        uint256 a = (j.toUint() * vaultStorage.psJuniorRay) / ONE_RAY; // floor
+        return Assets.wrap(uint112(a));
+    }
+
+    function _juniorSharesToAssetsUp(Shares j) internal view returns (Assets) {
+        uint256 ps = vaultStorage.psJuniorRay;
+        uint256 num = j.toUint() * ps;
+        uint256 a = (num + ONE_RAY - 1) / ONE_RAY; // ceil
+        return Assets.wrap(uint112(a));
+    }
+
     function promoteToJunior(uint256 seniorSharesIn, address to)
         public virtual nonReentrant
         returns (uint256 jSharesOut) {

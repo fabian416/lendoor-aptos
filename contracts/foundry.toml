@@ -2,5 +2,14 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+optimizer = true
+optimizer_runs = 20_000
+via_ir = true
+bytecode_hash = "none"
+cbor_metadata = false
 
+fs_permissions = [
+    { access = "read", path = "script" },
+    { access = "write", path = "script" },
+]
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

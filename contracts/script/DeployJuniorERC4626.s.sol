@@ -7,9 +7,8 @@ import {JuniorERC4626} from "../src/Wrapper/JuniorERC4626.sol";
 
 contract DeployJuniorERC4626 is Script {
     function run() public returns (address wrapper) {
-        string memory inputFile  = "JuniorERC4626_input.json";
         string memory outputFile = "JuniorERC4626_output.json";
-        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/script/", inputFile));
+        string memory json = vm.envString("INPUT_JSON");
 
         address evault = vm.parseJsonAddress(json, ".evault");
         string memory name_   = vm.parseJsonString(json, ".name");

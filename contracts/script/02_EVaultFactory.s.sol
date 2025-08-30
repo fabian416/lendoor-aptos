@@ -6,7 +6,7 @@ import {GenericFactory} from "evk/GenericFactory/GenericFactory.sol";
 
 contract EVaultFactory is Script {
     function run() public returns (address eVaultFactory) {
-        string memory outputScriptFileName = "06_EVaultFactory_output.json";
+        string memory outputScriptFileName = "02_EVaultFactory_output.json";
 
         // Read input from /script
         string memory json = vm.envString("INPUT_JSON");

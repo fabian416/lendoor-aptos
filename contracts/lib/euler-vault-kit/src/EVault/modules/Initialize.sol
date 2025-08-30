@@ -52,11 +52,13 @@ abstract contract InitializeModule is IInitialize, BorrowUtils {
         vaultStorage.hookedOps = Flags.wrap(OP_MAX_VALUE - 1);
 
         {
-            string memory underlyingSymbol = getTokenSymbol(address(asset));
-            uint256 seqId = sequenceRegistry.reserveSeqId(underlyingSymbol);
+        {
+        
+            // uint256 seqId = sequenceRegistry.reserveSeqId("sUSD");
 
-            vaultStorage.symbol = string(abi.encodePacked("e", underlyingSymbol, "-", uintToString(seqId)));
-            vaultStorage.name = string(abi.encodePacked("EVK Vault ", vaultStorage.symbol));
+            // Hardcode
+            vaultStorage.symbol = "sUSD";
+            vaultStorage.name   = "Senior USD";
         }
 
         // --- Tranches init ---

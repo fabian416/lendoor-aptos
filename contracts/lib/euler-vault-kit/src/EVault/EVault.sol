@@ -93,7 +93,50 @@ contract EVault is Dispatch {
 
     function skim(uint256 amount, address receiver) public virtual override callThroughEVC use(MODULE_VAULT) returns (uint256) {}
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    //                                       JUNIOR (previews & views)                                      //
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    function jTotalSupply() public view virtual override useView(MODULE_VAULT) returns (uint256) {}
+    function jBalanceOf(address account) public view virtual override useView(MODULE_VAULT) returns (uint256) {}
+    function convertToJuniorShares(uint256 assets) public view virtual override useView(MODULE_VAULT) returns (uint256) {}
+    function convertToJuniorAssets(uint256 jShares) public view virtual override useView(MODULE_VAULT) returns (uint256) {}
 
+    // ---- (state-changing) ----
+    function promoteToJunior(uint256 seniorSharesIn, address to)
+        public virtual override callThroughEVC use(MODULE_VAULT) returns (uint256) {}
+
+    function demoteToSenior(uint256 jSharesIn, address to)
+        public virtual override callThroughEVC use(MODULE_VAULT) returns (uint256) {}
+    // --------------------------
+    function availableCashAssets()
+        public view virtual override useView(MODULE_VAULT)
+        returns (uint256)
+    {}
+
+    function juniorCapacityLeftAssets()
+        public view virtual override useView(MODULE_VAULT)
+        returns (uint256)
+    {}
+
+    function previewDepositJunior(uint256 assets)
+        public view virtual override useView(MODULE_VAULT)
+        returns (uint256)
+    {}
+
+    function previewMintJunior(uint256 shares)
+        public view virtual override useView(MODULE_VAULT)
+        returns (uint256)
+    {}
+
+    function previewWithdrawJunior(uint256 assets)
+        public view virtual override useView(MODULE_VAULT)
+        returns (uint256)
+    {}
+
+    function previewRedeemJunior(uint256 shares)
+        public view virtual override useView(MODULE_VAULT)
+        returns (uint256)
+    {}    
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     //                                        BORROWING                                          //
@@ -155,7 +198,7 @@ contract EVault is Dispatch {
 
     function checkVaultStatus() public virtual override returns (bytes4) { return super.checkVaultStatus(); }
 
-
+    
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     //                                   BALANCE TRACKING                                        //

@@ -68,8 +68,34 @@ struct VaultStorage {
     // Address which will be called for enabled hooks
     address hookTarget;
 
+    // ---------------------------------------------------------------------
+    // [Tranches] suppport Senior/Junior in a unique EVault
+    // ---------------------------------------------------------------------
+
+    /// @dev Price-per-share (PPS) Senior trenche in RAY (1e27).
+    ///      Relation: assets = shares * psSeniorRay / 1e27
+    uint256 psSeniorRay;
+
+    /// @dev Price-per-share (PPS) Junior trench in RAY (1e27).
+    ///      Relación: assets = jShares * psJuniorRay / 1e27
+    uint256 psJuniorRay;
+
+    /// @dev Total shares of the Junior tranche.
+    Shares  totalSharesJunior;
+
+    /// @dev Snapshot of the assets at the last accrual of interest and harvest of the tranches. 
+    ///     Used for _AccrueTranches() to calculate the amount of assets to be distributed to each tranche.
+    uint256 lastAssetsSnap;
+
+    /// @dev Timestamp of the last accrual of interest and harvest of the tranches.
+    ///      avoiding to accrue tranches too often.
+    uint64  lastAccrualTs;
+
     // User accounts
     mapping(address account => UserStorage) users;
+
+    // Net external flow of assets (deposits - withdrawals) in the current batch
+    int256 netExternalFlowAssets; 
 
     // LTV configuration for collaterals
     mapping(address collateral => LTVConfig) ltvLookup;

@@ -9,7 +9,7 @@ import {Governance} from "evk/EVault/modules/Governance.sol";
 import {Initialize} from "evk/EVault/modules/Initialize.sol";
 import {Liquidation} from "evk/EVault/modules/Liquidation.sol";
 import {Token} from "evk/EVault/modules/Token.sol";
-import {Vault} from "evk/EVault/modules/Vault.sol";
+import {Vault} from "lendoor/Vault/Vault.sol";
 import {Dispatch} from "evk/EVault/Dispatch.sol";
 import {EVault} from "evk/EVault/EVault.sol";
 

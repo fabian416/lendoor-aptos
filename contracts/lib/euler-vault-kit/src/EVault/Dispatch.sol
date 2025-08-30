@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 import {Base} from "./shared/Base.sol";
 
 import {TokenModule} from "./modules/Token.sol";
-import {VaultModule} from "./modules/Vault.sol";
+import {VaultModule} from "lendoor/Vault/Vault.sol";
 import {BorrowingModule} from "./modules/Borrowing.sol";
 import {LiquidationModule} from "./modules/Liquidation.sol";
 import {InitializeModule} from "./modules/Initialize.sol";

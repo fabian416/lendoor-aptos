@@ -2,22 +2,27 @@
 
 pragma solidity ^0.8.0;
 
-import {IVault, IEVault, IERC4626} from "../IEVault.sol";
-import {Base} from "../shared/Base.sol";
-import {BalanceUtils} from "../shared/BalanceUtils.sol";
-import {AssetTransfers} from "../shared/AssetTransfers.sol";
-import {SafeERC20Lib} from "../shared/lib/SafeERC20Lib.sol";
-import {ProxyUtils} from "../shared/lib/ProxyUtils.sol";
-import {UserStorage} from "../shared/types/UserStorage.sol";
+import {IVault, IEVault, IERC4626} from "evk/EVault/IEVault.sol";
+import {Base} from "evk/EVault/shared/Base.sol";
+import {BalanceUtils} from "evk/EVault/shared/BalanceUtils.sol";
+import {AssetTransfers} from "evk/EVault/shared/AssetTransfers.sol";
+import {SafeERC20Lib} from "evk/EVault/shared/lib/SafeERC20Lib.sol";
+import {ProxyUtils} from "evk/EVault/shared/lib/ProxyUtils.sol";
+import {UserStorage} from "evk/EVault/shared/types/UserStorage.sol";
 
-import "../shared/types/Types.sol";
-import "../shared/Constants.sol";
-
+import "evk/EVault/shared/types/Types.sol";
+import "evk/EVault/shared/Constants.sol";
 
 /// @title VaultModule
 /// @custom:security-contact security@euler.xyz
 /// @author Euler Labs (https://www.eulerlabs.com/)
-/// @notice An EVault module handling ERC4626 standard behaviour
+/// @notice An EVault module handling ERC4626 standard behaviour,
+///         modified to integrate senior/junior tranche logic.
+/// @dev This fork extends the original VaultModule by:
+///      - Adding tranche-related state variables (`psSeniorRay`, `psJuniorRay`, `totalSharesJunior`, etc.).
+///      - Initializing tranche accounting in `initialize()`.
+///      - Supporting separate exchange rates and redemption paths for senior vs. junior tranches.
+///      - Preserving compatibility with the base EVault interfaces, while expanding semantics.
 abstract contract VaultModule is IVault, AssetTransfers, BalanceUtils {
     using TypesLib for uint256;
     using SafeERC20Lib for IERC20;

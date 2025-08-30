@@ -270,6 +270,65 @@ abstract contract VaultModule is IVault, AssetTransfers, BalanceUtils {
             return (limit < max ? limit : max).toShares();
         }
     }
+
+    function promoteToJunior(uint256 seniorSharesIn, address to)
+        public virtual nonReentrant
+        returns (uint256 jSharesOut) {
+        _accrueTranches();
+        (VaultCache memory v, address owner) = initOperation(OP_TRANSFER, CHECKACCOUNT_CALLER);
+
+        // seniorSharesIn -> assets (floor)
+        Assets assetsA = _seniorSharesToAssetsDown(seniorSharesIn.toShares());
+        if (assetsA.toUint() == 0) revert E_ZeroAssets();
+
+        // Cap check: juniorNAV + assets ≤ cap * poolNAV / 10_000
+        uint256 poolNAV   = _poolNAVNet(v);
+        uint256 juniorNAV = _juniorSharesToAssetsDown(vaultStorage.totalSharesJunior).toUint();
+        if ((juniorNAV + assetsA.toUint()) * 10_000 > JUNIOR_CAP_BPS * poolNAV) {
+            revert E_JuniorTrancheCapExceeded();
+        }
+
+        // assets -> junior shares (floor)
+        Shares jShares = _assetsToJuniorSharesDown(assetsA);
+        jSharesOut = jShares.toUint();
+
+        // Removes senior from balance and credits junior
+        decreaseBalance(v, owner, owner, address(0), seniorSharesIn.toShares(), assetsA);
+        vaultStorage.users[to].juniorBalance = vaultStorage.users[to].juniorBalance.addShares(jShares);
+        vaultStorage.totalSharesJunior       = vaultStorage.totalSharesJunior.addShares(jShares);
+
+        return jSharesOut;
+    }
+
+    function demoteToSenior(uint256 jSharesIn, address to)
+        public virtual nonReentrant
+        returns (uint256 seniorSharesOut){
+        _accrueTranches();
+        (VaultCache memory v, address owner) = initOperation(OP_TRANSFER, CHECKACCOUNT_CALLER);
+
+        if (jSharesIn == 0) return 0;
+
+        // jShares -> assets (floor)
+        Shares jShares = jSharesIn.toShares();
+        Assets assetsA = _juniorSharesToAssetsDown(jShares);
+        if (assetsA.toUint() == 0) revert E_ZeroAssets();
+
+        // Debit junior from owner
+        UserStorage storage user = vaultStorage.users[owner];
+        if (jShares.toUint() > user.juniorBalance.toUint()) revert E_InsufficientBalance();
+        user.juniorBalance = user.juniorBalance.subShares(jShares);
+        vaultStorage.totalSharesJunior = vaultStorage.totalSharesJunior.subShares(jShares);
+
+        // assets -> senior shares (floor)
+        Shares seniorShares = _assetsToSeniorSharesDown(assetsA);
+        seniorSharesOut = seniorShares.toUint();
+
+        // Credit senior
+        increaseBalance(v, to, owner, seniorShares, assetsA);
+
+        return seniorSharesOut;
+    }
+
 }
 
 /// @dev Deployable module contract

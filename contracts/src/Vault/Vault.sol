@@ -2,17 +2,16 @@
 
 pragma solidity ^0.8.0;
 
-import {IVault, IEVault, IERC4626} from "contracts/lib/euler-vault-kit/src/EVault/IEVault.sol";
-import {Base} from "contracts/lib/euler-vault-kit/src/EVault/shared/Base.sol";
-import {BalanceUtils} from "contracts/lib/euler-vault-kit/src/EVault/shared/BalanceUtils.sol";
-import {AssetTransfers} from "contracts/lib/euler-vault-kit/src/EVault/shared/AssetTransfers.sol";
-import {SafeERC20Lib} from "contracts/lib/euler-vault-kit/src/EVault/shared/lib/SafeERC20Lib.sol";
-import {ProxyUtils} from "contracts/lib/euler-vault-kit/src/EVault/shared/lib/ProxyUtils.sol";
-import {UserStorage} from "contracts/lib/euler-vault-kit/src/EVault/shared/types/UserStorage.sol";
+import {IVault, IEVault, IERC4626} from "evk/EVault/IEVault.sol";
+import {Base} from "evk/EVault/shared/Base.sol";
+import {BalanceUtils} from "evk/EVault/shared/BalanceUtils.sol";
+import {AssetTransfers} from "evk/EVault/shared/AssetTransfers.sol";
+import {SafeERC20Lib} from "evk/EVault/shared/lib/SafeERC20Lib.sol";
+import {ProxyUtils} from "evk/EVault/shared/lib/ProxyUtils.sol";
+import {UserStorage} from "evk/EVault/shared/types/UserStorage.sol";
 
-import "contracts/lib/euler-vault-kit/src/EVault/shared/types/Types.sol";
-import "contracts/lib/euler-vault-kit/src/EVault/shared/Constants.sol";
-
+import "evk/EVault/shared/types/Types.sol";
+import "evk/EVault/shared/Constants.sol";
 
 /// @title VaultModule
 /// @custom:security-contact security@euler.xyz

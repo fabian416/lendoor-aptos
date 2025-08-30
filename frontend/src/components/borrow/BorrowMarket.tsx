@@ -9,15 +9,17 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { PullPanel } from '@/components/borrow/PullPanel'
 import { RepayPanel } from '@/components/borrow/RepayPanel'
+import UserJourneyBadge from '../common/UserJourneyBadge'
+import { useUserJourney } from '../providers/UserProvider'
 
 type Tab = 'Pull' | 'Repay'
 
-export function CreditMarket() {
-  const [isExpanded, setIsExpanded] = useState(false)
+export function CreditMarket({setShowQR}: any) {
   const [activeTab, setActiveTab] = useState<Tab>('Pull')
   const isLoggedIn = useIsLoggedIn()
   const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
-
+  const { ready, value, is_only_borrow } = useUserJourney();
+  
   // TODO: conecta con tus contratos
   const handlePull = (amt: string) => {
     console.log('Pull amount:', amt)
@@ -43,19 +45,14 @@ export function CreditMarket() {
                       : 'text-muted-foreground hover:text-foreground cursor-pointer'
                   }`}
                 >
+                  {ready && is_only_borrow && activeTab != tab && tab == "Pull" && <UserJourneyBadge />}
+                  {ready && value == "repay" && activeTab != tab && tab == "Repay" && <UserJourneyBadge />}
+                  &nbsp;&nbsp;
                   {tab}
                 </button>
               ))}
             </div>
           </div>
-          {!isLoggedIn && !loadingNetwork && (
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm px-4 py-2 cursor-pointer"
-              onClick={() => setShowAuthFlow(true)}
-            >
-              Connect Wallet
-            </Button>
-          )}
         </div>
 
         {activeTab === 'Pull' ? (
@@ -64,6 +61,7 @@ export function CreditMarket() {
               loadingNetwork={loadingNetwork}
               onConnect={() => setShowAuthFlow(true)}
               onPull={(amt) => handlePull(amt)}
+              setShowQR={setShowQR}
             />
           ) : (
             <RepayPanel

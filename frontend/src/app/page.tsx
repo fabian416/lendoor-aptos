@@ -21,7 +21,7 @@ export default function Home() {
               className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 py-4 mono-text text-lg tracking-wide border border-primary/50"
             >
               <Link href="/borrow">
-                ENTER APP
+                LAUNCH APP
               </Link>
               <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
@@ -58,7 +58,7 @@ export default function Home() {
                 <div className="space-y-2 text-xs mono-text">
                   <div className="flex justify-between">
                     <span className="text-foreground">AVERAGE RATE:</span>
-                    <span className="text-terminal-yellow">9.5%</span>
+                    <span className="text-terminal-yellow">12%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-foreground">LIMIT:</span>
@@ -84,7 +84,7 @@ export default function Home() {
                 <div className="space-y-2 text-xs mono-text">
                   <div className="flex justify-between">
                     <span className="text-foreground">APY:</span>
-                    <span className="text-terminal-green">15.2%</span>
+                    <span className="text-terminal-green">10%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-foreground">TVL:</span>

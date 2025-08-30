@@ -1,15 +1,17 @@
-// app/lend/page.tsx
-"use client";
+import { Suspense } from 'react';
+import LendPage from './client';
 
-import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
-import { LendMarket } from "@/components/lend/LendMarket";
-
-export default function LendPage() {
-  const { setShowAuthFlow } = useDynamicContext();
-
+export default function Page() {
   return (
-    <div className="container mx-auto w-full max-w-3xl">
-        <LendMarket />
-    </div>
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col justify-center items-center text-blue-600">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-300 border-t-transparent"></div>
+        <p className="mt-4 text-lg font-medium">Loading...</p>
+      </div>
+    }>
+      <LendPage />
+    </Suspense>
   );
 }
+
+

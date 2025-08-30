@@ -9,6 +9,8 @@ import { ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { BorrowLimitKPI } from '../kpi/Limit'
 import { CreditScoreKPI } from '../kpi/Score'
 import { BaseApyKPI } from '../kpi/BaseAPY'
+import UserJourneyBadge from '../common/UserJourneyBadge'
+import { useUserJourney } from '../providers/UserProvider'
 
 type PullPanelProps = {
   isLoggedIn: boolean,
@@ -16,6 +18,7 @@ type PullPanelProps = {
   onConnect: () => void,
   onPull: (amount: string) => void,
   maxPullLabel?: string // ej: "MAX PULL 0"
+  setShowQR: (show: boolean) => void,
 }
 
 export function PullPanel({
@@ -24,13 +27,17 @@ export function PullPanel({
   onConnect,
   onPull,
   maxPullLabel = 'MAX PULL: ',
+  setShowQR
 }: PullPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
+  const { ready, value } = useUserJourney();
+  console.log(value)
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!isLoggedIn) return onConnect()
+    setShowQR(true);
     if (!amount) return
     onPull(amount)
   }
@@ -68,6 +75,7 @@ export function PullPanel({
                 type="submit"
                 className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
               >
+                {ready && (value === "verify_identity" || value === "borrow") && <UserJourneyBadge/>}
                 {cta}
               </Button>
             </form>

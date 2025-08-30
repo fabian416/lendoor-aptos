@@ -7,6 +7,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { SupplyPanel } from '@/components/lend/SupplyPanel'
 import { WithdrawsUSDCPanel } from '@/components/lend/WithdrawsUSDCPanel'
 import { WithdrawjUSDCPanel } from './WithdrawjUSDCPanel'
+import UserJourneyBadge from '../common/UserJourneyBadge'
+import { useUserJourney } from '../providers/UserProvider'
 
 type Tab = 'Supply' | 'Withdraw sUSDC' | 'Withdraw jUSDC'
 
@@ -14,6 +16,7 @@ export function LendMarket() {
   const [activeTab, setActiveTab] = useState<Tab>('Supply')
   const isLoggedIn = useIsLoggedIn()
   const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
+  const { ready,  } = useUserJourney();
 
   // TODO: conectá con tus contracts
   const handleSupply = (amt: string) => console.log('Supply amount:', amt)
@@ -41,15 +44,6 @@ export function LendMarket() {
               ))}
             </div>
           </div>
-
-          {!isLoggedIn && !loadingNetwork && (
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm px-4 py-2 cursor-pointer"
-              onClick={() => setShowAuthFlow(true)}
-            >
-              Connect Wallet
-            </Button>
-          )}
         </div>
 
         {activeTab === 'Supply' ? (

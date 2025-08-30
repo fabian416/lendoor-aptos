@@ -13,6 +13,8 @@ import { AvailableToWithdrawKPI } from '../kpi/AvailableToWithdraw'
 import { JusdcBalanceKPI } from '../kpi/jUSDCBalance'
 import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
 import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
+import UserJourneyBadge from '../common/UserJourneyBadge'
+import { useUserJourney } from '../providers/UserProvider'
 
 type WithdrawPanelProps = {
   isLoggedIn: boolean

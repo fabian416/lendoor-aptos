@@ -5,10 +5,13 @@ import { DynamicWidget, useIsLoggedIn, useDynamicContext } from "@dynamic-labs/s
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import Image from "next/image"
+import { useUserJourney } from '../providers/UserProvider';
+import UserJourneyBadge from './UserJourneyBadge';
 
 export function Header() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
+  const { ready, is_borrow, is_lend } = useUserJourney();
   
   return (
      <header className="border-b border-primary/20 bg-background/95 backdrop-blur-md sticky top-0 z-50">
@@ -18,9 +21,14 @@ export function Header() {
             <div className="text-2xl font-bold text-primary mono-text terminal-cursor">LENDOOR</div>
           </Link>
           <nav className="hidden md:flex space-x-8 mono-text">
-          <Link href="/borrow" className="text-muted-foreground hover:text-primary terminal-hover px-2 py-1 text-sm">
+            
+            <Link href="/borrow" className="text-muted-foreground hover:text-primary terminal-hover px-2 py-1 text-sm">
+              <div className="flex items-center gap-2">
+              {(ready && is_borrow) && <UserJourneyBadge /> }
               BORROW
+              </div>
             </Link>
+            {(ready && is_lend) && <UserJourneyBadge /> }
             <Link href="/lend" className="text-muted-foreground hover:text-primary terminal-hover px-2 py-1 text-sm">
               LEND
             </Link>

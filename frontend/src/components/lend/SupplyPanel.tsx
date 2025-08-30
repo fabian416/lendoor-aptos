@@ -9,6 +9,8 @@ import { CenteredAmountInput } from '@/components/common/CenteredAmountInput'
 import { JrApyKPI } from '@/components/kpi/JrAPY'
 import { BackingTVVKPI } from '@/components/kpi/BackingTVV'
 import { SrApyKPI } from '@/components/kpi/SrAPY'
+import UserJourneyBadge from '../common/UserJourneyBadge'
+import { useUserJourney } from '../providers/UserProvider'
 
 type SupplyPanelProps = {
   isLoggedIn: boolean

@@ -6,6 +6,7 @@ import { Inter, JetBrains_Mono, Geist_Mono } from "next/font/google"
 import { Header } from "@/components/common/Header";
 import { DynamicProvider } from "@/components/providers/DynamicProvider";
 import { Suspense } from "react";
+import { UserJourneyProvider } from "@/components/providers/UserProvider";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" })
 
@@ -48,6 +49,7 @@ export default function RootLayout({
     >
       <body className={inter.className}>
         <DynamicProvider>
+          <UserJourneyProvider>
           <div className="min-h-screen bg-background">
             {/* Background geométrico sutil en blanco */}
             <div className="fixed inset-0 opacity-5 pointer-events-none">
@@ -64,6 +66,7 @@ export default function RootLayout({
               </main>
             </div>
           </div>
+          </UserJourneyProvider>
         </DynamicProvider>
       </body>
     </html>

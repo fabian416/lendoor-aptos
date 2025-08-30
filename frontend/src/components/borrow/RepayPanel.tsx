@@ -9,6 +9,8 @@ import { ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { BaseApyKPI } from '../kpi/BaseAPY'
 import { OutstandingKPI } from '../kpi/Outstanding'
 import { CreditScoreKPI } from '../kpi/Score'
+import UserJourneyBadge from '../common/UserJourneyBadge'
+import { useUserJourney } from '../providers/UserProvider'
 
 type RepayPanelProps = {
   isLoggedIn: boolean,

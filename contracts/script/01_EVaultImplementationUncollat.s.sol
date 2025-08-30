@@ -34,8 +34,8 @@ contract EVaultImplementationUncollat is Script {
         Base.Integrations memory integrations;
 
         // Read input JSON from /script
-        string memory inFile  = "05_EVaultImplementation_input.json";
-        string memory outFile = "05_EVaultImplementation_output.json";
+        string memory inFile  = "01_EVaultImplementation_input.json";
+        string memory outFile = "01_EVaultImplementation_output.json";
         string memory json = vm.readFile(
             string.concat(vm.projectRoot(), "/script/", inFile)
         );

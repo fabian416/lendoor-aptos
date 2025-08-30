@@ -19,6 +19,9 @@ abstract contract VaultModule is IVault, AssetTransfers, BalanceUtils {
     using TypesLib for uint256;
     using SafeERC20Lib for IERC20;
 
+
+    uint256 internal constant JUNIOR_CAP_BPS = 2_000; // 20%
+
     /// @inheritdoc IERC4626
     function asset() public view virtual reentrantOK returns (address) {
         (IERC20 _asset,,) = ProxyUtils.metadata();

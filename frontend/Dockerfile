@@ -49,6 +49,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/vite.config.ts ./
 
 
-EXPOSE 4501
+EXPOSE 3000
 
-CMD ["yarn", "preview", "--host", "0.0.0.0", "--port", "4501"]
+CMD ["yarn", "preview", "--host", "0.0.0.0", "--port", "3000"]

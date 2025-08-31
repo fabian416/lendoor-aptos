@@ -19,7 +19,7 @@ export function CenteredAmountInput({ value, onChange, symbol = '$', className }
     const el = measureRef.current
     if (!el) return
     setPx(el.offsetWidth + 4) // colchón para el caret
-  }, [display])
+  }, [display]) 
 
   return (
     <div className="w-full">

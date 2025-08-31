@@ -11,6 +11,8 @@ import { CreditScoreKPI } from '../kpi/Score'
 import { BaseApyKPI } from '../kpi/BaseAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
+import { useVault } from '../providers/VaultProvider'
+import { parseUnits } from 'ethers'
 import ExpandedMenu from './ExpandedMenu'
 
 type PullPanelProps = {
@@ -33,13 +35,34 @@ export function PullPanel({
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const { ready, value, isVerified } = useUserJourney();
+  const { evault, connectedAddress } = useVault();
+  const [submitting, setSubmitting] = useState(false);
+  
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isLoggedIn) return onConnect()
-    setShowQR(true);
+    if (ready && !isVerified) return setShowQR(true);
     if (!amount) return
-    onPull(amount)
+    if (!evault) {
+      throw Error('No se pudo instanciar el contrato (evault).')
+      return
+    }
+    
+    try {
+      setSubmitting(true)
+
+      const amountBN = parseUnits(amount, 4)
+      console.log(amountBN);
+      const tx = await evault.borrow(amountBN, connectedAddress)
+      await tx.wait()
+    } catch (err: any) {
+      console.error(err)
+      throw Error('Transaction failed.');
+    } finally {
+      setSubmitting(false)
+    }
+
   }
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Borrow now';
@@ -74,7 +97,7 @@ export function PullPanel({
           <div className="mb-4">
             {/* form ahora ocupa todo el ancho */}
             <form onSubmit={submit} className="w-full">
-              <CenteredAmountInput value={amount} onChange={setAmount} />
+              <CenteredAmountInput value={amount} onChange={setAmount}  symbol='¢' />
               <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
                 {maxPullLabel}{toBorrow}{" USDC"}
               </div>
@@ -82,6 +105,7 @@ export function PullPanel({
               {/* botón full width */}
               <Button
                 type="submit"
+                disabled={!amount}
                 className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
               >
                 {ready && (value === "verify_identity" || value === "borrow") && <UserJourneyBadge/>}

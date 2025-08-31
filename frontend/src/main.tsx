@@ -8,17 +8,20 @@ import App from './App.jsx'
 
 import 'buffer' 
 import { VLayerProvider } from './components/providers/VLayerProvider.js'
+import { VaultProvider } from './components/providers/VaultProvider.js'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <DynamicProvider>
       <UserJourneyProvider>
         <VLayerProvider>
-        <BrowserRouter>
-          <Suspense fallback={null}>
-            <App />
-          </Suspense>
-        </BrowserRouter>
+          <VaultProvider>
+            <BrowserRouter>
+              <Suspense fallback={null}>
+                <App />
+              </Suspense>
+            </BrowserRouter>
+            </VaultProvider>
         </VLayerProvider>
       </UserJourneyProvider>
     </DynamicProvider>

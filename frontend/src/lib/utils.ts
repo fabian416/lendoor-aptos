@@ -10,56 +10,28 @@ export function cn(...inputs: ClassValue[]) {
   const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
   const baseImageUrl = isLocal ? 'http://localhost:3000' : 'https://zk-loans.aichallenge.fun';
 
-  export const evmNetworks = [/*
+  export const evmNetworks = [
   {
-    blockExplorerUrls: ['https://sepolia.etherscan.io'],
-    chainId: 11155111,
-    chainName: 'Ethereum Sepolia',
+    blockExplorerUrls: ['https://etherscan.io'],
+    chainId: 1,
+    chainName: 'Ethereum Mainnet',
     iconUrls: [`${baseImageUrl}/eth_logo.png`],
-    name: 'Sepolia Testnet',
+    name: 'Ethereum',
     nativeCurrency: {
       decimals: 18,
-      name: 'Sepolia Ether',
-      symbol: 'SEP',
+      name: 'Ether',
+      symbol: 'ETH',
       iconUrl: `${baseImageUrl}/eth_logo.png`,
     },
-    networkId: 11155111,
-    rpcUrls: ['https://eth-sepolia.g.alchemy.com/v2/N3g083ohb92Bs8eNHAlR7'],
-    vanityName: 'Ethereum Sepolia',
-  },*/
-  {
-    blockExplorerUrls: ['https://basescan.org'],
-    chainId: 8453,
-    chainName: 'Base',
-    iconUrls: [`${baseImageUrl}/base_logo.svg`],
-    name: 'Base Mainnet',
-    nativeCurrency: {
-      decimals: 18,
-      name: 'Ether',
-      symbol: 'ETH',
-      iconUrl: `${baseImageUrl}/base_logo.svg`,
-    },
-    networkId: 8453,
-    rpcUrls: ['https://mainnet.base.org'],
-    vanityName: 'Base',
-  },/*
-  {
-    blockExplorerUrls: ['https://sepolia.basescan.org'],
-    chainId: 84532,
-    chainName: 'Base Sepolia',
-    iconUrls: [`${baseImageUrl}/base_logo.svg`],
-    name: 'Base Sepolia Testnet',
-    nativeCurrency: {
-      decimals: 18,
-      name: 'Ether',
-      symbol: 'ETH',
-      iconUrl: `${baseImageUrl}/base_logo.svg`,
-    },
-    networkId: 84532,
-    rpcUrls: ['https://sepolia.base.org'],
-    vanityName: 'Base Sepolia',
-  },*/
+    networkId: 1,
+    rpcUrls: [
+      'https://eth-mainnet.g.alchemy.com/v2/K_R03CbSUiXz-EaoiaeE4FuglxgxE_Nt',
+      'https://rpc.ankr.com/eth',
+    ],
+    vanityName: 'Ethereum Mainnet',
+  },
 ];
+
 
 
 export const tokensToCheckTeleporter = [

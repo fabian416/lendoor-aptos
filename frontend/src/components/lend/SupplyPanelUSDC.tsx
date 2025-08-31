@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ChevronDown, ChevronUp, Info } from 'lucide-react'
@@ -11,6 +11,10 @@ import { BackingTVVKPI } from '@/components/kpi/BackingTVV'
 import { SrApyKPI } from '@/components/kpi/SrAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
+import { formatUnits, parseUnits } from 'ethers'
+import { useVault } from '../providers/VaultProvider'
+import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
+import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
 
 type SupplyPanelProps = {
   isLoggedIn: boolean
@@ -30,13 +34,62 @@ export function SupplyPanel({
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const { ready, value } = useUserJourney();
+  const [submitting, setSubmitting] = useState(false);
+  const [balance, setBalance] = useState("0");
+  const { evault, usdc, evaultAddress, connectedAddress } = useVault();
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isLoggedIn) return onConnect()
     if (!amount) return
-    onSupply(amount)
+    if (!evault) {
+      throw Error('No se pudo instanciar el contrato (evault).')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const amountBN = parseUnits(amount, 4)
+      console.log(amountBN);
+      console.log(evaultAddress);
+      
+      const tx = await usdc!.approve(evaultAddress, amountBN)
+      await tx.wait()
+
+      const tx2 = await evault.deposit(amountBN, connectedAddress)
+      await tx2.wait()
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false)
+    }
   }
+
+   useEffect(() => {
+    if (submitting) return;
+    let alive = true
+    ;(async () => {
+      if (!evault || !connectedAddress) return
+      try {
+        // (si tiene decimals, usalo; si no, 18)
+        const dec =
+          typeof (evault as any).decimals === 'function'
+            ? Number(await (evault as any).decimals())
+            : 18
+
+        const bal: bigint = await (evault as any).balanceOf(connectedAddress)
+        const next = formatUnits(bal, dec)
+        // Evitar re-render si no cambió
+        setBalance(prev => (prev === next ? prev : next))
+      } catch (e) {
+        console.error('read balanceOf:', e)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+    // 🔑 dependé del address estable y del usuario, NO del objeto contrato
+  }, [evaultAddress, connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Supply Liquidity'
 
@@ -44,9 +97,9 @@ export function SupplyPanel({
     <>
       {/* KPIs específicos de Lend */}
       <div className="grid grid-cols-4 gap-2 w-full mx-auto">
-        <JrApyKPI value="20%" />
-        <BackingTVVKPI value="10.4M" />
         <SrApyKPI value="10%" />
+        <BackingTVVKPI value="10.4M" />
+        <SusdcBalanceKPI value={balance} />
       </div>
 
       <Card className="p-4 border-2 border-border/50">
@@ -55,7 +108,7 @@ export function SupplyPanel({
         </div>
 
         <form onSubmit={submit} className="w-full">
-            <CenteredAmountInput value={amount} onChange={setAmount} />
+            <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢'/>
             <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
             {supplyCapLabel}
             </div>
@@ -63,6 +116,7 @@ export function SupplyPanel({
             {/* botón full width */}
             <Button
             type="submit"
+            disabled={!amount || submitting}
             className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
             >
             {ready && (value === "supply_liquidity") && <UserJourneyBadge/>}

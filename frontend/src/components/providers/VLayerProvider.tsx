@@ -18,7 +18,7 @@ import { vlayerClient } from '@/lib/vlayerTeleporterClient';
 const PROVER_ADDRESS = (import.meta.env.VITE_VLAYER_AVERAGE_BALANCE_ADDRESS ??
   '') as `0x${string}`;
 
-const CHAIN_ID = Number('8453');
+const CHAIN_ID = Number('1');
 const GAS_LIMIT = Number(import.meta.env.VITE_PUBLIC_TIMETRAVEL_CHAIN_ID ?? '1000000'); // 1e6
 
 // ABIs

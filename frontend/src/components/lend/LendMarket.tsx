@@ -4,16 +4,17 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useIsLoggedIn, useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { SupplyPanel } from '@/components/lend/SupplyPanel'
+import { SupplyPanel } from '@/components/lend/SupplyPanelUSDC'
+import { SupplyPanelSUSDC } from './SupplyPanelSUDC'
 import { WithdrawsUSDCPanel } from '@/components/lend/WithdrawsUSDCPanel'
 import { WithdrawjUSDCPanel } from './WithdrawjUSDCPanel'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 
-type Tab = 'Supply' | 'Withdraw sUSDC' | 'Withdraw jUSDC'
+type Tab = 'Supply USDC' | 'Supply sUSDC' | 'Withdraw sUSDC' | 'Withdraw jUSDC'
 
 export function LendMarket() {
-  const [activeTab, setActiveTab] = useState<Tab>('Supply')
+  const [activeTab, setActiveTab] = useState<Tab>('Supply USDC')
   const isLoggedIn = useIsLoggedIn()
   const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
   const { ready, value } = useUserJourney();
@@ -29,7 +30,7 @@ export function LendMarket() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex gap-1">
-              {(['Supply', 'Withdraw sUSDC', 'Withdraw jUSDC'] as Tab[]).map((tab) => (
+              {(['Supply USDC','Supply sUSDC', 'Withdraw sUSDC', 'Withdraw jUSDC'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -40,7 +41,7 @@ export function LendMarket() {
                   }`}
                 >
 
-                  {ready && value == "supply_liquidity" && activeTab != tab && tab == "Supply" && <UserJourneyBadge />}
+                  {ready && value == "supply_liquidity" && activeTab != tab && tab == "Supply USDC" && <UserJourneyBadge />}
                   {ready && value == "withdraw_susdc" && activeTab != tab && tab == "Withdraw sUSDC" && <UserJourneyBadge />}
                   {ready && value == "withdraw_jusdc" && activeTab != tab && tab == "Withdraw jUSDC" && <UserJourneyBadge />}
                   &nbsp;&nbsp;
@@ -51,8 +52,15 @@ export function LendMarket() {
           </div>
         </div>
 
-        {activeTab === 'Supply' ? (
+        {activeTab === 'Supply USDC' ? (
           <SupplyPanel
+            isLoggedIn={!!isLoggedIn}
+            loadingNetwork={loadingNetwork}
+            onConnect={() => setShowAuthFlow(true)}
+            onSupply={handleSupply}
+          />
+        ) : activeTab === 'Supply sUSDC' ? (
+          <SupplyPanelSUSDC
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={() => setShowAuthFlow(true)}

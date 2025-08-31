@@ -8,7 +8,6 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname } from "next/navigation";
 import { useIsLoggedIn, useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { backendUri } from "@/lib/constants";
 
@@ -44,8 +43,18 @@ const LEND_SET = new Set<UserJourney>([
 function isUserJourney(v: unknown): v is UserJourney {
   return typeof v === "string" && (USER_JOURNEYS as readonly string[]).includes(v);
 }
-function inSection(pathname: string, base: string) {
-  return pathname === base || pathname.startsWith(base + "/");
+export function normalizePath(p?: string | null): string {
+  if (!p) return '/';
+  // saca query/hash y el trailing slash (menos en raíz)
+  const cleaned = p.split('?')[0].split('#')[0].replace(/\/+$/, '');
+  return cleaned === '' ? '/' : cleaned;
+}
+
+export function inSection(pathname: string | null | undefined, base: string) {
+  const p = normalizePath(pathname);
+  const b = normalizePath(base);
+  // está exactamente en la sección o debajo de ella
+  return p === b || p.startsWith(b + '/');
 }
 const normalizeWallet = (w?: string | null) => (w ?? "").trim().toLowerCase();
 
@@ -53,6 +62,7 @@ const normalizeWallet = (w?: string | null) => (w ?? "").trim().toLowerCase();
 type Ctx = {
   value: UserJourney;
   set: (next: UserJourney) => Promise<void>;
+  setIsVerified: any;
   clear: () => Promise<void>;
   refresh: () => Promise<void>;
   ready: boolean;
@@ -81,7 +91,7 @@ export function UserJourneyProvider({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pathname = usePathname() || "";
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
 
   /* Dynamic Labs */
   const isLoggedIn = useIsLoggedIn();
@@ -170,8 +180,8 @@ export function UserJourneyProvider({
   }, [fetchStep]);
 
   /* Derived flags */
-  const onBorrowPage = useMemo(() => inSection(pathname, "/borrow"), [pathname]);
-  const onLendPage = useMemo(() => inSection(pathname, "/lend"), [pathname]);
+  const onBorrowPage = useMemo(() => inSection(pathname, '/borrow'), [pathname]);
+  const onLendPage   = useMemo(() => inSection(pathname, '/lend'),   [pathname]);
 
   const is_borrow = useMemo(
     () => BORROW_SET.has(value) && !onBorrowPage,
@@ -193,6 +203,7 @@ export function UserJourneyProvider({
       loading,
       error,
       isVerified,
+      setIsVerified,
       is_borrow,
       is_only_borrow,
       is_lend,
@@ -207,6 +218,7 @@ export function UserJourneyProvider({
       loading,
       error,
       isVerified,
+      setIsVerified,
       is_borrow,
       is_only_borrow,
       is_lend,

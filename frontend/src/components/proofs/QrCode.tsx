@@ -10,6 +10,7 @@ import { InfoTip } from '@/components/common/InfoTooltip'
 import { ArrowLeft, ShieldCheck, CheckCircle } from 'lucide-react'
 import { backendUri } from '@/lib/constants'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
+import { useUserJourney } from '../providers/UserProvider'
 
 type QRCodeViewProps = {
   onBack: () => void
@@ -42,6 +43,7 @@ export function QRCodeView({
   const [error, setError] = useState<string | null>(null)
 
   const { primaryWallet, setShowAuthFlow } = useDynamicContext()
+  const { setIsVerified } = useUserJourney();
 
   // ---- wallet actual siempre fresca (evita closures "stale") ----
   const walletRef = useRef<string>('')     // address en minúsculas
@@ -100,6 +102,7 @@ export function QRCodeView({
       const clRaw = data?.user?.creditLimit
       const cl = typeof clRaw === 'number' ? clRaw : clRaw != null ? Number(clRaw as any) : null
       setCreditLimit(Number.isFinite(cl as number) ? (cl as number) : null)
+      setIsVerified(true);
     } catch (e: any) {
       setVerified(false)
       setError(e?.message ?? 'Error submitting proof to backend.')

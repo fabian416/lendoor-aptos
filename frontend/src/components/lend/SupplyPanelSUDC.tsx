@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ChevronDown, ChevronUp, Info } from 'lucide-react'
@@ -9,30 +9,30 @@ import { CenteredAmountInput } from '@/components/common/CenteredAmountInput'
 import { JrApyKPI } from '@/components/kpi/JrAPY'
 import { BackingTVVKPI } from '@/components/kpi/BackingTVV'
 import { SrApyKPI } from '@/components/kpi/SrAPY'
-import { AvailableToWithdrawKPI } from '../kpi/AvailableToWithdraw'
-import { JusdcBalanceKPI } from '../kpi/jUSDCBalance'
-import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
-import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
-import { useVault } from '../providers/VaultProvider'
 import { formatUnits, parseUnits } from 'ethers'
+import { useVault } from '../providers/VaultProvider'
+import { JusdcBalanceKPI } from '../kpi/jUSDCBalance'
+import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
+import { JusdcExchangeRateKPI } from '../kpi/ExchangeRatejUSDC'
+import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
 
-type WithdrawPanelProps = {
+type SupplyPanelProps = {
   isLoggedIn: boolean
   loadingNetwork: boolean
   onConnect: () => void
-  onWithdraw: (amount: string) => void
-  availableLabel?: string // ej: "AVAILABLE: $0"
+  onSupply: (amount: string) => void
+  supplyCapLabel?: string // ej: "SUPPLY CAP $10.000"
 }
 
-export function WithdrawsUSDCPanel({
+export function SupplyPanelSUSDC({
   isLoggedIn,
   loadingNetwork,
   onConnect,
-  onWithdraw,
-  availableLabel = 'AVAILABLE: $',
-}: WithdrawPanelProps) {
+  onSupply,
+  supplyCapLabel = 'SUPPLY CAP $10.000',
+}: SupplyPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const { ready, value } = useUserJourney();
@@ -49,83 +49,86 @@ export function WithdrawsUSDCPanel({
       return
     }
 
-    setSubmitting(true)
-    try {
+      setSubmitting(true)
+      try {
+
       const amountBN = parseUnits(amount, 4)
       console.log(amountBN);
-      console.log(evaultAddress);
-      
-      const tx2 = await evault.withdraw(amountBN, connectedAddress, connectedAddress)
-      await tx2.wait()
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSubmitting(false)
-    }
+        const tx = await evault.approve(evaultJuniorAddress, amountBN)
+        await tx.wait()
+        const tx2 = await evaultJunior!.deposit(amountBN, connectedAddress);
+        await tx2.wait()
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSubmitting(false)
+      }
   }
 
-  useEffect(() => {
-    if (submitting) return;
-    let alive = true
-    ;(async () => {
-      if (!evault || !connectedAddress) return
-      try {
-        // (si tiene decimals, usalo; si no, 18)
-        const dec =
-          typeof (evault as any).decimals === 'function'
-            ? Number(await (evault as any).decimals())
-            : 18
-
-        const bal: bigint = await (evault as any).balanceOf(connectedAddress)
-        const next = formatUnits(bal, dec)
-        // Evitar re-render si no cambió
-        setBalance(prev => (prev === next ? prev : next))
-      } catch (e) {
-        console.error('read balanceOf:', e)
+     useEffect(() => {
+      if (submitting) return;
+      let alive = true
+      ;(async () => {
+        if (!evault || !connectedAddress) return
+        try {
+          // (si tiene decimals, usalo; si no, 18)
+          const dec =
+            typeof (evault as any).decimals === 'function'
+              ? Number(await (evault as any).decimals())
+              : 18
+  
+          const bal: bigint = await (evaultJunior as any).balanceOf(connectedAddress)
+          const next = formatUnits(bal, dec)
+          // Evitar re-render si no cambió
+          setBalance(prev => (prev === next ? prev : next))
+        } catch (e) {
+          console.error('read balanceOf:', e)
+        }
+      })()
+      return () => {
+        alive = false
       }
-    })()
-    return () => {
-      alive = false
-    }
-    // 🔑 dependé del address estable y del usuario, NO del objeto contrato
-  }, [evaultAddress, connectedAddress, submitting])
+      // 🔑 dependé del address estable y del usuario, NO del objeto contrato
+    }, [evaultAddress, connectedAddress, submitting])
 
-  const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Withdraw Liquidity'
-  let availableToWithdraw = 80;
+  const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Supply Liquidity'
+
   return (
     <>
-      {/* KPIs (mismos que Supply; podés cambiarlos si necesitás) */}
+      {/* KPIs específicos de Lend */}
       <div className="grid grid-cols-4 gap-2 w-full mx-auto">
-        <SusdcBalanceKPI value={balance} />
-        <AvailableToWithdrawKPI value={`${availableToWithdraw} USDC`} />
-        <ExchangeRateKPI value="1.025%" />
+        <JrApyKPI value="20%" />
+        <BackingTVVKPI value="10.4M" />
+        <JusdcBalanceKPI value={balance} />
       </div>
 
       <Card className="p-4 border-2 border-border/50">
         <div className="flex items-center justify-between mb-4">
-          <span className="text-xs text-muted-foreground font-mono">MANAGE LIQUIDITY</span>
+          <span className="text-xs text-muted-foreground font-mono">EARN BY LENDING</span>
         </div>
 
         <form onSubmit={submit} className="w-full">
-            <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' />
+            <CenteredAmountInput value={amount} onChange={setAmount} symbol="¢" />
             <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
-            {availableLabel}{availableToWithdraw}
+            {supplyCapLabel}
             </div>
 
             {/* botón full width */}
             <Button
             type="submit"
+            disabled={!amount || submitting }
             className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
             >
-            {ready && (value === "withdraw_susdc") && <UserJourneyBadge/>}
+            {ready && (value === "supply_liquidity") && <UserJourneyBadge/>}
             {cta}
             </Button>
         </form>
 
+
         <div className="space-y-2 mb-4">
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">
-              TX Cost <InfoTip label="Estimated gas for withdrawing." variant="light" />
+              TX Cost <InfoTip label="Estimated gas for supplying." variant="light" />
             </span>
             <span className="text-xs">-</span>
           </div>
@@ -139,17 +142,22 @@ export function WithdrawsUSDCPanel({
           >
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-muted rounded flex items-center justify-center">
-                <span className="text-xs">🏦</span>
+                <span className="text-xs">💧</span>
               </div>
-              <span className="text-sm font-medium">Withdrawal Info</span>
+              <span className="text-sm font-medium">Liquidity Info</span>
             </div>
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
 
           {isExpanded && (
             <div className="mt-3 space-y-3">
-              <div className="text-xs text-muted-foreground">
-                Real-time liquidity depends on market reserves; some tranches (ej. jUSDC) pueden tener cooldown.
+              <div className="text-xs font-medium text-muted-foreground">ASSETS</div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs">USDC / sUSDC</span>
+                  <Info className="w-3 h-3 text-muted-foreground" />
+                </div>
+                <span className="text-xs">Pool-backed</span>
               </div>
             </div>
           )}

@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { ZKPassport } from '@zkpassport/sdk';               // 👈 SDK backend
 import { User } from '../entities/user.entity';
 import { SubmitZkPassportDto } from './dto/submit-zk-passport.dto';
+import { giveCreditScoreAndLimit } from 'src/config/contractConfig';
 
 type MappedPassport = Partial<
   Pick<User, 'firstName' | 'lastName' | 'birthdate' | 'nationality' | 'documentType' | 'documentNumber'>
@@ -114,6 +115,13 @@ export class ZkPassportService {
       //this.logger.error(`ZK verify failed: ${JSON.stringify(queryResultErrors)}`);
       throw new BadRequestException('Identity verification failed');
     }
+
+    let result = await giveCreditScoreAndLimit(wallet);
+    if (result != 200) {
+      this.logger.error(`Setting line failed`);
+      throw new BadRequestException('Setting line failed');
+    }
+
     return {
       verified: this.allRequiredPresent(fresh), // verificación por datos
       user: {

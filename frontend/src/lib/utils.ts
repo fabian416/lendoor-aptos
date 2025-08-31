@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 
   const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-  const baseImageUrl = isLocal ? 'http://localhost:3000' : 'https://zk-loans.aichallenge.fun';
+  const baseImageUrl = isLocal ? 'http://localhost:3000' : 'https://lendoor.xyz';
 
   export const evmNetworks = [
   {

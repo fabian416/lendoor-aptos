@@ -54,6 +54,7 @@
     "uuid": "^11.1.0",
     "viem": "^2.30.5",
     "vite-plugin-node-polyfills": "^0.21.0",
+    "wagmi": "^2.16.9",
     "webpack": "^5.101.3",
     "zustand": "^5.0.5"
   },

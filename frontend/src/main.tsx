@@ -7,16 +7,19 @@ import './index.css'
 import App from './App.jsx'
 
 import 'buffer' 
+import { VLayerProvider } from './components/providers/VLayerProvider.js'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <DynamicProvider>
       <UserJourneyProvider>
+        <VLayerProvider>
         <BrowserRouter>
           <Suspense fallback={null}>
             <App />
           </Suspense>
         </BrowserRouter>
+        </VLayerProvider>
       </UserJourneyProvider>
     </DynamicProvider>
   </StrictMode>

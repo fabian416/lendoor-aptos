@@ -9,21 +9,23 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import type { Abi, Address, Hash } from 'viem';
+
+import { keccak256, toBytes, type Abi, type Address, type Hash } from 'viem';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
 import { vlayerClient } from '@/lib/vlayerTeleporterClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config (ENV + defaults)
-const PROVER_ADDRESS = (import.meta.env.VITE_VLAYER_AVERAGE_BALANCE_ADDRESS ?? '') as Address;
-
 const CHAIN_ID = Number('1');
-const GAS_LIMIT = Number(import.meta.env.VITE_PUBLIC_TIMETRAVEL_CHAIN_ID ?? '1000000'); // 1e6
 
 // ABIs
 import proverSpec from '@/contracts/AverageBalance.json';
-// Cortamos inferencia del ABI (evita TS2589)
 const AVERAGE_BALANCE_ABI = (proverSpec as any).abi as unknown as Abi;
+
+// Hash del ABI (muchos SDKs esperan un branded hash del ABI/programa)
+const AVERAGE_BALANCE_ABI_HASH = keccak256(
+  toBytes(JSON.stringify(AVERAGE_BALANCE_ABI))
+) as Hash;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -36,13 +38,11 @@ export type AverageBalanceResult = {
 };
 
 type GenericProveArgs = {
-  address?: Address;               // address del caller (si no, usa el del user)
-  proverAddress?: Address;         // override del prover (default: env)
-  proverAbi: Abi;                  // ABI del prover
-  functionName: string;            // nombre de la función
-  args?: ReadonlyArray<unknown>;   // args readonly (evita inferencia variádica)
-  chainId?: number;                // default: CHAIN_ID
-  gasLimit?: number;               // default: GAS_LIMIT (si el SDK lo usa)
+  // ya no mandamos address del contrato; usamos abiHash
+  proverAbi: Abi;
+  functionName: string;
+  args?: ReadonlyArray<unknown>;
+  chainId?: number;
 };
 
 type VLayerContextType = {
@@ -51,18 +51,14 @@ type VLayerContextType = {
   loading: boolean;
   error?: string;
 
-  // resultados en memoria (último)
-  lastProof?: Proof;
+  lastProof?: Hash;      // guardo el hash plano
   lastResult?: unknown;
 
-  // acciones
   disconnect: () => Promise<void>;
 
-  // helpers genéricos
-  prove: (params: GenericProveArgs) => Promise<unknown>;
+  prove: (params: GenericProveArgs) => Promise<Hash>;
   waitForResult: (hash: Hash | string) => Promise<unknown>;
 
-  // caso de uso concreto
   proveAverageBalance: (owner?: Address) => Promise<AverageBalanceResult>;
 };
 
@@ -78,20 +74,20 @@ export const VLayerProvider: React.FC<React.PropsWithChildren> = ({ children }) 
   const [isReady, setIsReady] = useState(false);
   const [userAddress, setUserAddress] = useState<Address | undefined>();
   const [loading, setLoading] = useState(false);
-  const [lastProof, setLastProof] = useState<Proof | undefined>();
+  const [lastProof, setLastProof] = useState<Hash | undefined>();
   const [lastResult, setLastResult] = useState<unknown | undefined>();
   const [error, setError] = useState<string | undefined>();
 
   const mounted = useRef(true);
 
-  // detectar dirección del usuario desde Dynamic (ajustá a tu shape real)
   useEffect(() => {
     mounted.current = true;
+
     const addr = user?.verifiedCredentials?.[0]?.address as Address | undefined;
     setUserAddress(addr);
 
-    // el provider queda ready si tengo un PROVER_ADDRESS y algún chainId definido
-    setIsReady(Boolean(PROVER_ADDRESS) && Number.isFinite(CHAIN_ID));
+    // listo si tengo chain id y abi hash
+    setIsReady(Boolean(AVERAGE_BALANCE_ABI_HASH) && Number.isFinite(CHAIN_ID));
 
     return () => {
       mounted.current = false;
@@ -107,7 +103,7 @@ export const VLayerProvider: React.FC<React.PropsWithChildren> = ({ children }) 
     } finally {
       if (!mounted.current) return;
       setUserAddress(undefined);
-      setIsReady(Boolean(PROVER_ADDRESS) && Number.isFinite(CHAIN_ID));
+      setIsReady(Boolean(AVERAGE_BALANCE_ABI_HASH) && Number.isFinite(CHAIN_ID));
       setLastProof(undefined);
       setLastResult(undefined);
       setError(undefined);
@@ -115,44 +111,37 @@ export const VLayerProvider: React.FC<React.PropsWithChildren> = ({ children }) 
     }
   }, [handleLogOut]);
 
-  // helper genérico: hace prove y devuelve el hash
+  // Hace prove y devuelve el hash plano
   const prove = useCallback(
-    async (params: GenericProveArgs): Promise<unknown> => {
+    async (params: GenericProveArgs): Promise<Hash> => {
       const {
-        address,
-        proverAddress = PROVER_ADDRESS,
         proverAbi,
         functionName,
         args = [],
         chainId = CHAIN_ID,
-        gasLimit = GAS_LIMIT, // por si el SDK lo usa
       } = params;
 
-      if (!proverAddress) throw new Error('Falta VITE_VLAYER_AVERAGE_BALANCE_ADDRESS');
       if (!functionName) throw new Error('functionName requerido');
       if (!proverAbi) throw new Error('proverAbi requerido');
-
-      const caller = (address ?? userAddress) as Address | undefined;
-      if (!caller) throw new Error('No hay address (ni del usuario ni por parámetro)');
 
       setLoading(true);
       setError(undefined);
 
       try {
-        // IMPORTANTE:
-        //  - No usar spread [...args] (dispara inferencia variádica)
-        //  - Castear args a unknown para evitar uniones readonly infinitas del SDK
-        const proofHash = await vlayerClient.prove({
-          address: proverAddress,
-          proverAbi: proverAbi as unknown as Abi,
-          functionName: functionName as string,
-          args: args as unknown, // ← corte de inferencia
+        // NOTA: varios SDKs esperan 'abiHash' o 'programHash'.
+        // Si el tuyo usa 'programHash', cambiá la key acá.
+        const branded = await vlayerClient.prove<typeof AVERAGE_BALANCE_ABI, typeof functionName>({
+          abiHash: AVERAGE_BALANCE_ABI_HASH,      // ⬅️ clave: branded hash del ABI
+          proverAbi: proverAbi as unknown as Abi, // corta inferencia profunda
+          functionName: functionName as any,      // evita branded del nombre
+          args: args as readonly unknown[],       // readonly, sin spread
           chainId,
-          // gasLimit, // si tu SDK lo admite
-        } as any); // ← red final para branded generics
+        } as any);
 
-        setLastProof(proofHash);
-        return proofHash;
+        // El retorno es BrandedHash<T,F>. Extraigo .hash y lo tipéo plano.
+        const hash = (branded as { hash: Hash }).hash;
+        setLastProof(hash);
+        return hash;
       } catch (e: any) {
         const msg = e?.message ?? 'Error desconocido en vlayerClient.prove';
         setError(msg);
@@ -161,15 +150,14 @@ export const VLayerProvider: React.FC<React.PropsWithChildren> = ({ children }) 
         if (mounted.current) setLoading(false);
       }
     },
-    [userAddress],
+    [],
   );
 
-  // helper: espera resultado
   const waitForResult = useCallback(async (hash: Hash | string): Promise<unknown> => {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await vlayerClient.waitForProvingResult({ hash: hash as Hash });
+      const result = await vlayerClient.waitForProvingResult({ hash: hash as any });
       setLastResult(result);
       return result;
     } catch (e: any) {
@@ -181,26 +169,20 @@ export const VLayerProvider: React.FC<React.PropsWithChildren> = ({ children }) 
     }
   }, []);
 
-  // caso concreto: averageBalanceOf(address)
+  // Caso concreto: averageBalanceOf(address)
   const proveAverageBalance = useCallback(
     async (owner?: Address): Promise<AverageBalanceResult> => {
       const target = (owner ?? userAddress) as Address | undefined;
       if (!target) throw new Error('No hay owner/address para calcular el average balance');
 
-      // 1) PROVE
-      const proofHash = (await prove({
-        address: target,
+      const proofHash = await prove({
         proverAbi: AVERAGE_BALANCE_ABI,
         functionName: 'averageBalanceOf',
-        // Tu función parece ser (address) → args de 1 elemento
-        args: [target] as const, // readonly y concreto (evita inferencia rara)
-      })) as string;
+        args: [target] as const,   // tupla readonly evita inferencias raras
+      });
 
-      // 2) Esperar resultado
-      const result: any = await waitForResult(proofHash as Hash);
-
-      // Ajustá el layout según tu backend: acá asumo result[2] = avgBalance
-      const avg = BigInt(result?.[2] ?? 0n);
+      const result: any = await waitForResult(proofHash);
+      const avg = BigInt(result?.[2] ?? 0n); // ajustá índice según tu backend
 
       return {
         proof: result,

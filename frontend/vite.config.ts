@@ -27,11 +27,11 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',
     port: 3000,
-    allowedHosts: ['lendoor.aichallenge.fun'],
+    allowedHosts: ['lendoor.lendoor.xyz'],
   },
   server: {
     host: '0.0.0.0',
     port: 3000,
-    allowedHosts: ['lendoor.aichallenge.fun'],
+    allowedHosts: ['lendoor.lendoor.xyz'],
   }
 })

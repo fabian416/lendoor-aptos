@@ -133,7 +133,7 @@ export function QRCodeView({
     try {
       if (!zkpassportRef.current) {
         // pasá tu host (sin protocolo) si necesitás canales cross-host
-        // zkpassportRef.current = new ZKPassport('lendoor.aichallenge.fun')
+        // zkpassportRef.current = new ZKPassport('lendoor.lendoor.xyz')
         zkpassportRef.current = new ZKPassport(window.location.host)
       }
 

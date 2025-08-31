@@ -11,6 +11,7 @@ import { OutstandingKPI } from '../kpi/Outstanding'
 import { CreditScoreKPI } from '../kpi/Score'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
+import ExpandedMenu from './ExpandedMenu'
 
 type RepayPanelProps = {
   isLoggedIn: boolean,
@@ -109,32 +110,7 @@ export function RepayPanel({
               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
 
-            {isExpanded && (
-              <div className="mt-3 space-y-3">
-                <div className="text-xs font-medium text-muted-foreground">CREDIT SCORE</div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-primary rounded-full" />
-                    <span className="text-xs">Lendoor Score</span>
-                    <Info className="w-3 h-3 text-muted-foreground" />
-                  </div>
-                  <span className="text-xs">0/1000</span>
-                </div>
-
-                <div className="text-xs font-medium text-muted-foreground mt-3">ASSETS</div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">🔗</span>
-                    <span className="text-xs">Onchain</span>
-                    
-                    <InfoTip label="Verified on-chain assets used as backing." contentClassName="font-display text-[11px] leading-snug" />
-                  </div>
-                  <span className="text-xs">$0</span>
-                </div>
-              </div>
-            )}
+            {isExpanded && <ExpandedMenu score="120/255" /> }
           </div>
         </Card>
         </>

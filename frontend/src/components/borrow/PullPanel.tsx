@@ -11,6 +11,7 @@ import { CreditScoreKPI } from '../kpi/Score'
 import { BaseApyKPI } from '../kpi/BaseAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
+import ExpandedMenu from './ExpandedMenu'
 
 type PullPanelProps = {
   isLoggedIn: boolean,
@@ -46,12 +47,13 @@ export function PullPanel({
   let borrowed = 100;
   let borrowLimit = 1000;
   let toBorrow = borrowLimit - borrowed;
+  let score = "120/255";
   return (
     <>
         <div className="grid grid-cols-4 gap-2 w-full mx-auto">
           <BaseApyKPI value="6.82%" />
           <BorrowLimitKPI value={`${borrowed}/${borrowLimit}`} />
-          <CreditScoreKPI value="120/255" />
+          <CreditScoreKPI value={score} />
         </div>
 
         {/* Panel principal (monta el componente según tab) */}
@@ -108,35 +110,12 @@ export function PullPanel({
                   <span className="text-xs">💳</span>
                 </div>
                 <span className="text-sm font-medium">Credit Info</span>
+                
               </div>
               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
 
-            {isExpanded && (
-              <div className="mt-3 space-y-3">
-                <div className="text-xs font-medium text-muted-foreground">CREDIT SCORE</div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-primary rounded-full" />
-                    <span className="text-xs">Lendoor Score</span>
-                    <Info className="w-3 h-3 text-muted-foreground" />
-                  </div>
-                  <span className="text-xs">0/1000</span>
-                </div>
-
-                <div className="text-xs font-medium text-muted-foreground mt-3">ASSETS</div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">🔗</span>
-                    <span className="text-xs">Onchain</span>
-                    <InfoTip label="Verified on-chain assets used as backing." variant="light" />
-                  </div>
-                  <span className="text-xs">$0</span>
-                </div>
-              </div>
-            )}
+            {isExpanded && ( <ExpandedMenu score={score} /> )}
           </div>
         </Card>
         </>

@@ -42,7 +42,7 @@ export function cn(...inputs: ClassValue[]) {
     networkId: 8453,
     rpcUrls: ['https://mainnet.base.org'],
     vanityName: 'Base',
-  },
+  },/*
   {
     blockExplorerUrls: ['https://sepolia.basescan.org'],
     chainId: 84532,
@@ -58,7 +58,7 @@ export function cn(...inputs: ClassValue[]) {
     networkId: 84532,
     rpcUrls: ['https://sepolia.base.org'],
     vanityName: 'Base Sepolia',
-  },
+  },*/
 ];
 
 

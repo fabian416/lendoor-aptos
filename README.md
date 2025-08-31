@@ -223,4 +223,3 @@ bb prove -b ./target/AverageBalance.json          -w ./target/AverageBalance.wtn
 ## 🤝 Credits
 
 Built with ❤️ by the **Lendoor** team for the **Aleph Hackathon**.  
-Powered by **zkPassport**, **vLayer**, **Noir**, **Risc0**, **Veramo**, **NestJS**, **React**, and the **Ethereum Mainnet ecosystem**.  

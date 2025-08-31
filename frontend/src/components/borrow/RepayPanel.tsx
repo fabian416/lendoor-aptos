@@ -60,7 +60,7 @@ export function RepayPanel({
           <div className="mb-4">
             {/* 👇 form ahora ocupa todo el ancho */}
             <form onSubmit={submit} className="w-full">
-              <CenteredAmountInput value={amount} onChange={setAmount} />
+              <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' />
 
               <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
                 {outstandingLabel}{outstanding}

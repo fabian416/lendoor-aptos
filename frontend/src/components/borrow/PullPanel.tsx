@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '../common/CenteredAmountInput'
@@ -12,7 +12,7 @@ import { BaseApyKPI } from '../kpi/BaseAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 import { useVault } from '../providers/VaultProvider'
-import { parseUnits } from 'ethers'
+import { formatUnits, parseUnits } from 'ethers'
 import ExpandedMenu from './ExpandedMenu'
 
 type PullPanelProps = {
@@ -35,8 +35,9 @@ export function PullPanel({
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const { ready, value, isVerified } = useUserJourney();
-  const { evault, connectedAddress } = useVault();
+  const { evault, evaultAddress, connectedAddress, usdc, controller } = useVault();
   const [submitting, setSubmitting] = useState(false);
+  const [balance, setBalance] = useState("0");
   
 
   const submit = async (e: React.FormEvent) => {
@@ -54,7 +55,9 @@ export function PullPanel({
 
       const amountBN = parseUnits(amount, 4)
       console.log(amountBN);
-      const tx = await evault.borrow(amountBN, connectedAddress)
+      const tx1= await controller.enableController(connectedAddress, evaultAddress);
+      await tx1.wait()
+      const tx = await evault.borrow(amountBN, connectedAddress);
       await tx.wait()
     } catch (err: any) {
       console.error(err)
@@ -64,6 +67,32 @@ export function PullPanel({
     }
 
   }
+
+   useEffect(() => {
+      if (submitting) return;
+      let alive = true
+      ;(async () => {
+        if (!evault || !connectedAddress) return
+        try {
+          // (si tiene decimals, usalo; si no, 18)
+          const dec =
+            typeof (evault as any).decimals === 'function'
+              ? Number(await (evault as any).decimals())
+              : 18
+  
+          const bal: bigint = await (evault as any).debtOf(connectedAddress)
+          const next = formatUnits(bal, dec)
+          // Evitar re-render si no cambió
+          setBalance(prev => (prev === next ? prev : next))
+        } catch (e) {
+          console.error('read balanceOf:', e)
+        }
+      })()
+      return () => {
+        alive = false
+      }
+      // 🔑 dependé del address estable y del usuario, NO del objeto contrato
+    }, [evaultAddress, connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Borrow now';
   
@@ -105,7 +134,7 @@ export function PullPanel({
               {/* botón full width */}
               <Button
                 type="submit"
-                disabled={!amount}
+                disabled={!amount || submitting}
                 className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
               >
                 {ready && (value === "verify_identity" || value === "borrow") && <UserJourneyBadge/>}

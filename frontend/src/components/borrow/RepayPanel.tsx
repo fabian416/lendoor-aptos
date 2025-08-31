@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '../common/CenteredAmountInput'
@@ -12,6 +12,8 @@ import { CreditScoreKPI } from '../kpi/Score'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 import ExpandedMenu from './ExpandedMenu'
+import { useVault } from '../providers/VaultProvider'
+import { formatUnits, parseUnits } from 'ethers'
 
 type RepayPanelProps = {
   isLoggedIn: boolean,
@@ -31,22 +33,69 @@ export function RepayPanel({
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const { ready, value } = useUserJourney();
+  const [submitting, setSubmitting] = useState(false);
+  const { evault, evaultAddress, connectedAddress, usdc, controller } = useVault();
+  const [balance, setBalance] = useState("0");
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!isLoggedIn) return onConnect()
-    if (!amount) return
-    onRepay(amount)
-  }
+  const submit = async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!isLoggedIn) return onConnect()
+      if (!amount) return
+      if (!evault) {
+        throw Error('No se pudo instanciar el contrato (evault).')
+        return
+      }
+      
+      try {
+        setSubmitting(true)
+  
+        const amountBN = parseUnits(amount, 4)
+        console.log(amountBN);
+        const tx1 = await usdc.approve(evaultAddress, amountBN);
+        const tx = await evault.repay(amountBN, connectedAddress);
+        await tx.wait()
+      } catch (err: any) {
+        console.error(err)
+        throw Error('Transaction failed.');
+      } finally {
+        setSubmitting(false)
+      }
+  
+    }
+
+    useEffect(() => {
+      if (submitting) return;
+      let alive = true
+      ;(async () => {
+        if (!evault || !connectedAddress) return
+        try {
+          // (si tiene decimals, usalo; si no, 18)
+          const dec =
+            typeof (evault as any).decimals === 'function'
+              ? Number(await (evault as any).decimals())
+              : 18
+  
+          const bal: bigint = await (evault as any).debtOf(connectedAddress)
+          const next = formatUnits(bal, dec)
+          // Evitar re-render si no cambió
+          setBalance(prev => (prev === next ? prev : next))
+        } catch (e) {
+          console.error('read balanceOf:', e)
+        }
+      })()
+      return () => {
+        alive = false
+      }
+      // 🔑 dependé del address estable y del usuario, NO del objeto contrato
+    }, [evaultAddress, connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Repay'
 
-  let outstanding = "102 USDC";
   return (
     <>
         <div className="grid grid-cols-4 gap-2 w-full mx-auto">
           <BaseApyKPI value="6.82%" />
-          <OutstandingKPI value={outstanding} />
+          <OutstandingKPI value={balance} />
           <CreditScoreKPI value="120/255" />
         </div>
 
@@ -63,7 +112,7 @@ export function RepayPanel({
               <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' />
 
               <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
-                {outstandingLabel}{outstanding}
+                {outstandingLabel}{balance}
               </div>
 
               {/* 👇 ahora sí, ocupa todo el ancho */}

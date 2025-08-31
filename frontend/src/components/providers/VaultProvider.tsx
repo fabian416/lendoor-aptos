@@ -14,10 +14,12 @@ import { BrowserProvider, Contract, ethers } from 'ethers';
 import type { Eip1193Provider } from 'ethers';
 import { useDynamicContext, useIsLoggedIn } from '@dynamic-labs/sdk-react-core';
 import IEVault from '@/contracts/IEVault.json';
+import * as IEVC from '@/contracts/IEVC.json';
 
 // ====== ENV (Vite) ======
 const EVAULT_ADDRESS = import.meta.env.VITE_EVAULT as `0x${string}` | undefined;
 const EVAULT_JUNIOR_ADDRESS = import.meta.env.VITE_EVAULT_JUNIOR as `0x${string}` | undefined;
+const EVAULT_CONTROLLER_ADDRESS = import.meta.env.VITE_EVAULT_CONTROLLER as `0x${string}` | undefined;
 const USDC_ADDRESS   = import.meta.env.VITE_USDC   as `0x${string}` | undefined;
 
 const EXPECTED_CHAIN_ID: number | null = null; // ej 8453
@@ -37,6 +39,7 @@ const ERC20_ABI = [
 
 type EVaultContract = Contract;
 type ERC20Contract  = Contract;
+type ControllerContract = Contract; 
 
 type VaultContextType = {
   ready: boolean;
@@ -46,6 +49,10 @@ type VaultContextType = {
 
   evaultJunior: EVaultContract | null;
   evaultJuniorAddress: `0x${string}` | null;
+
+  // controller
+  controller: ControllerContract | null;       
+  controllerAddress: `0x${string}` | null; 
 
   // usdc
   usdc: ERC20Contract | null;
@@ -100,6 +107,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [evault, setEVault] = useState<EVaultContract | null>(null);
   const [evaultJunior, setEVaultJunior] = useState<EVaultContract | null>(null); 
 
+
+  const [controller, setController] = useState<ControllerContract | null>(null);
+
   const [usdc, setUSDC]     = useState<ERC20Contract | null>(null);
   const [usdcDecimals, setUsdcDecimals] = useState<number | null>(null);
 
@@ -114,6 +124,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setReady(false);
     setEVault(null);
     setEVaultJunior(null);
+    setController(null);
     setUSDC(null);
     setUsdcDecimals(null);
     setSigner(null);
@@ -177,6 +188,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         cVaultJunior = new Contract(EVAULT_JUNIOR_ADDRESS, abi, tmpSigner);
         }
 
+      const controllerAbi = (IEVC as any).abi ?? IEVC;
+      let cController: ControllerContract | null = null;
+      if (!EVAULT_CONTROLLER_ADDRESS) {
+        console.warn('[Vault] Falta EVAULT_CONTROLLER_ADDRESS (VITE_EVAULT_CONTROLLER)');
+      } else {
+        cController = new Contract(EVAULT_CONTROLLER_ADDRESS, controllerAbi, tmpSigner);
+      }
 
       // 3b) USDC (ERC20)
       let cUsdc: ERC20Contract | null = null;
@@ -198,6 +216,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       setChainId(currentChainId);
       setEVault(cVault);
       setEVaultJunior(cVaultJunior);
+      setController(cController);
       setUSDC(cUsdc);
       setUsdcDecimals(dec);
       setReady(true);
@@ -221,6 +240,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         chainId: currentChainId,
         evaultAddress: EVAULT_ADDRESS,
         evaultJuniorAddress: EVAULT_JUNIOR_ADDRESS,
+        controllerAddress: EVAULT_CONTROLLER_ADDRESS, 
         usdcAddress: USDC_ADDRESS,
         usdcDecimals: dec,
       });
@@ -240,8 +260,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       evault,
       evaultAddress: (EVAULT_ADDRESS ?? null) as `0x${string}` | null,
 
-        evaultJunior, 
-        evaultJuniorAddress: (EVAULT_JUNIOR_ADDRESS ?? null) as `0x${string}` | null,
+      evaultJunior, 
+      evaultJuniorAddress: (EVAULT_JUNIOR_ADDRESS ?? null) as `0x${string}` | null,
+
+      controller, 
+      controllerAddress: (EVAULT_CONTROLLER_ADDRESS ?? null) as `0x${string}` | null,
 
       usdc,
       usdcAddress: (USDC_ADDRESS ?? null) as `0x${string}` | null,
@@ -257,7 +280,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [
       ready,
       evault,
-        evaultJunior, 
+      evaultJunior, 
+      controller,  
       signer,
       connectedAddress,
       chainId,

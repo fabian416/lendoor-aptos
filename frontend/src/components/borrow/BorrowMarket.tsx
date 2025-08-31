@@ -12,7 +12,7 @@ import { RepayPanel } from '@/components/borrow/RepayPanel'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 
-type Tab = 'Pull' | 'Repay'
+type Tab = 'Pull' | 'Repay' | 'Stake with Symbiotic'
 
 export function CreditMarket({setShowQR}: any) {
   const [activeTab, setActiveTab] = useState<Tab>('Pull')
@@ -35,9 +35,10 @@ export function CreditMarket({setShowQR}: any) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex gap-1">
-              {(['Pull', 'Repay'] as Tab[]).map((tab) => (
+              {(['Pull', 'Repay', 'Stake with Symbiotic'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
+                  disabled={tab==='Stake with Symbiotic'}
                   onClick={() => setActiveTab(tab)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     activeTab === tab

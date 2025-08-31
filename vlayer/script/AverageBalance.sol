@@ -13,7 +13,7 @@ contract DeployAverageBalance is Script {
     function run() external {
         // Lee variables de entorno
         address token = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;            // p.ej. USDC Base
-        uint256 startBlock = 20902135; // p.ej. 20902135
+        uint256 startBlock = 3002135; // p.ej. 20902135
         uint256 endBlock   = 34902135;   // p.ej. 34902135
         uint256 step       = 50000;           // p.ej. 100000
 

@@ -1,150 +1,246 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { BrowserProvider, Contract, ethers } from 'ethers';
-import type { Eip1193Provider } from 'ethers';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { Abi } from 'viem';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
-import type { WalletClient } from 'viem';
+import { vlayerClient } from '@/lib/vlayerTeleporterClient';
 
-import AverageBalanceArtifact from '@/contracts/AverageBalance.json';
+// ─────────────────────────────────────────────────────────────────────────────
+// Config (ENV + defaults)
+const PROVER_ADDRESS = (import.meta.env.VITE_VLAYER_AVERAGE_BALANCE_ADDRESS ??
+  '') as `0x${string}`;
 
-const AVERAGE_BALANCE_ADDRESS = import.meta.env.VITE_VLAYER_AVERAGE_BALANCE_ADDRESS as `0x${string}`;
+const CHAIN_ID = Number('8453');
+const GAS_LIMIT = Number(import.meta.env.VITE_PUBLIC_TIMETRAVEL_CHAIN_ID ?? '1000000'); // 1e6
 
+// ABIs
+import proverSpec from '@/contracts/AverageBalance.json';
+const AVERAGE_BALANCE_ABI = (proverSpec as any).abi as Abi;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tipos
 type Proof = any;
 
-type AverageBalanceResult = {
+export type AverageBalanceResult = {
   proof: Proof;
-  owner: string;
+  owner: `0x${string}`;
   avgBalance: bigint;
+};
+
+type GenericProveArgs = {
+  address?: `0x${string}`;        // address target de la llamada (si no, usa el del user)
+  proverAddress?: `0x${string}`;   // si querés sobreescribir el prover (default: env)
+  proverAbi: Abi;                  // ABI del prover
+  functionName: string;            // nombre de la función
+  args?: unknown[];                // args para la función
+  chainId?: number;                // default: CHAIN_ID
+  gasLimit?: number;               // default: GAS_LIMIT
 };
 
 type VLayerContextType = {
   isReady: boolean;
-  address?: string;
-  signerAddress?: string;
-  averageBalanceContract?: Contract;
+  userAddress?: `0x${string}`;
+  loading: boolean;
+  error?: string;
+
+  // resultados en memoria (último)
+  lastProof?: Proof;
+  lastResult?: unknown;
+
+  // acciones
   disconnect: () => Promise<void>;
-  getAverageBalance: (owner: string) => Promise<AverageBalanceResult>;
+
+  // helpers genéricos
+  prove: (params: GenericProveArgs) => Promise<unknown>;
+  waitForResult: (hash: string) => Promise<unknown>;
+
+  // caso de uso concreto
+  proveAverageBalance: (owner?: `0x${string}`) => Promise<AverageBalanceResult>;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Context
 const VLayerContext = createContext<VLayerContextType | null>(null);
 
-async function walletToEip1193(wallet: any): Promise<Eip1193Provider | undefined> {
-  if (!wallet) return undefined;
-
-  // 1) Dynamic wallets suelen exponer getWalletClient()
-  if (typeof wallet.getWalletClient === 'function') {
-    const wc = (await wallet.getWalletClient()) as WalletClient | undefined;
-    if (wc?.transport) return wc.transport as Eip1193Provider;
-  }
-
-  // 2) A veces a través del connector
-  const connector = wallet.connector as any;
-  if (connector?.getWalletClient) {
-    const wc = await connector.getWalletClient();
-    if (wc?.transport) return wc.transport as Eip1193Provider;
-  }
-  if (connector?.provider) {
-    return connector.provider as Eip1193Provider;
-  }
-
-  // 3) Fallback: window.ethereum
-  if (typeof window !== 'undefined' && (window as any).ethereum) {
-    return (window as any).ethereum as Eip1193Provider;
-  }
-
-  return undefined;
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider
 export const VLayerProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const { primaryWallet, handleLogOut } = useDynamicContext();
+  const { user, handleLogOut } = useDynamicContext();
 
   const [isReady, setIsReady] = useState(false);
-  const [signerAddress, setSignerAddress] = useState<string>();
-  const [averageBalanceContract, setAverageBalanceContract] = useState<Contract>();
-  const [connectedProvider, setConnectedProvider] = useState<Eip1193Provider>();
+  const [userAddress, setUserAddress] = useState<`0x${string}` | undefined>();
+  const [loading, setLoading] = useState(false);
+  const [lastProof, setLastProof] = useState<Proof | undefined>();
+  const [lastResult, setLastResult] = useState<unknown | undefined>();
+  const [error, setError] = useState<string | undefined>();
+
+  const mounted = useRef(true);
+
+  // detectar dirección del usuario desde Dynamic (según tu shape actual)
+  useEffect(() => {
+    mounted.current = true;
+    const addr = user?.verifiedCredentials?.[0]?.address as `0x${string}` | undefined;
+    setUserAddress(addr);
+
+    // el provider queda ready si tengo un PROVER_ADDRESS y algún chainId definido
+    setIsReady(Boolean(PROVER_ADDRESS) && Number.isFinite(CHAIN_ID));
+
+    return () => {
+      mounted.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.verifiedCredentials]);
 
   const disconnect = useCallback(async () => {
     try {
       await handleLogOut();
-    } catch {}
-    setAverageBalanceContract(undefined);
-    setConnectedProvider(undefined);
-    setSignerAddress(undefined);
-    setIsReady(false);
+    } catch (_) {
+      // noop
+    } finally {
+      if (!mounted.current) return;
+      setUserAddress(undefined);
+      setIsReady(Boolean(PROVER_ADDRESS) && Number.isFinite(CHAIN_ID));
+      setLastProof(undefined);
+      setLastResult(undefined);
+      setError(undefined);
+      setLoading(false);
+    }
   }, [handleLogOut]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // helper genérico: hace prove y devuelve el hash
+  const prove = useCallback(
+    async (params: GenericProveArgs): Promise<unknown> => {
+      const {
+        address,
+        proverAddress = PROVER_ADDRESS,
+        proverAbi,
+        functionName,
+        args = [],
+        chainId = CHAIN_ID,
+        gasLimit = GAS_LIMIT,
+      } = params;
 
-    (async () => {
+      if (!proverAddress) throw new Error('Falta NEXT_PUBLIC_TIMETRAVEL_PROVER_ADDRESS');
+      if (!functionName) throw new Error('functionName requerido');
+      if (!proverAbi) throw new Error('proverAbi requerido');
+
+      const caller = (address ?? userAddress) as `0x${string}` | undefined;
+      if (!caller) throw new Error('No hay address (ni del usuario ni por parámetro)');
+
+      setLoading(true);
+      setError(undefined);
+      
       try {
-        const eip1193 = await walletToEip1193(primaryWallet);
-        if (!eip1193 || cancelled) {
-          if (!cancelled) setIsReady(false);
-          return;
-        }
+        const proofHash = await vlayerClient.prove({
+          address: proverAddress,
+          proverAbi,
+          functionName,
+          args: [...args],
+          chainId,
+        });
 
-        const ethersProvider = new BrowserProvider(eip1193);
-        const signer = await ethersProvider.getSigner();
-        const addr = await signer.getAddress();
-
-        if (!AVERAGE_BALANCE_ADDRESS) {
-          throw new Error('Falta NEXT_PUBLIC_AVG_BALANCE_ADDRESS en el .env');
-        }
-
-        const abi = (AverageBalanceArtifact as any).abi ?? AverageBalanceArtifact;
-        const avgBalance = new Contract(AVERAGE_BALANCE_ADDRESS, abi, signer);
-
-        if (!cancelled) {
-          setConnectedProvider(eip1193);
-          setAverageBalanceContract(avgBalance);
-          setSignerAddress(addr);
-          setIsReady(true);
-        }
-      } catch (err) {
-        console.error('VLayerProvider init error:', err);
-        if (!cancelled) setIsReady(false);
+        // Podés devolver el hash directamente o esperar acá el resultado:
+        // yo devuelvo el hash y dejo que el consumidor llame a waitForResult.
+        setLastProof(proofHash);
+        return proofHash;
+      } catch (e: any) {
+        const msg = e?.message ?? 'Error desconocido en vlayerClient.prove';
+        setError(msg);
+        throw e;
+      } finally {
+        if (mounted.current) setLoading(false);
       }
-    })();
+    },
+    [userAddress],
+  );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [primaryWallet, disconnect]);
+  // helper: espera resultado
+  const waitForResult = useCallback(async (hash: string): Promise<unknown> => {
+    setLoading(true);
+    setError(undefined);
+    try {
+      const result = await vlayerClient.waitForProvingResult({ hash });
+      setLastResult(result);
+      return result;
+    } catch (e: any) {
+      const msg = e?.message ?? 'Error esperando el resultado de la prueba';
+      setError(msg);
+      throw e;
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, []);
 
-const getAverageBalance = useCallback(async (owner: string): Promise<AverageBalanceResult> => {
-  if (!averageBalanceContract) throw new Error('Contrato AverageBalance no inicializado aún');
-  if (!owner || !ethers.isAddress(owner)) throw new Error('Owner inválido');
+  // caso concreto: averageBalanceOf(address)
+  const proveAverageBalance = useCallback(
+    async (owner?: `0x${string}`): Promise<AverageBalanceResult> => {
+      const target = (owner ?? userAddress) as `0x${string}` | undefined;
+      if (!target) throw new Error('No hay owner/address para calcular el average balance');
 
-  try {
-    // ❌ Esto va a revertir en RPCs normales porque llama cheatcodes
-    const fn = averageBalanceContract.getFunction('averageBalanceOf');
-    const [proof, returnedOwner, avg] = await fn.staticCall(owner);
-    return { proof, owner: returnedOwner, avgBalance: avg };
-  } catch (err: any) {
-    // code=BAD_DATA con value="0x" => revert/empty return (cheatcode no disponible)
-    console.error('averageBalanceOf falló en RPC normal:', err);
-    throw new Error('Este método requiere ejecutarse vía vLayer Prover (no disponible por RPC). Usá el Prover endpoint.');
-  }
-}, [averageBalanceContract]);
+      // 1) Pedimos el PROVE
+      const proofHash = (await prove({
+        address: target,
+        proverAbi: AVERAGE_BALANCE_ABI,
+        functionName: 'averageBalanceOf',
+        args: [target],
+      })) as string;
 
+      // 2) Esperamos el resultado
+      const result: any = await waitForResult(proofHash);
+
+      // basándome en tu ejemplo: result[2] = avgBalance
+      // si cambia el layout, ajustá este parseo
+      const avg = BigInt(result?.[2] ?? 0n);
+
+      return {
+        proof: result,
+        owner: target,
+        avgBalance: avg,
+      };
+    },
+    [prove, waitForResult, userAddress],
+  );
 
   const value = useMemo<VLayerContextType>(
     () => ({
       isReady,
-      address: AVERAGE_BALANCE_ADDRESS,
-      signerAddress,
-      averageBalanceContract,
+      userAddress,
+      loading,
+      error,
+      lastProof,
+      lastResult,
       disconnect,
-      getAverageBalance,
+      prove,
+      waitForResult,
+      proveAverageBalance,
     }),
-    [isReady, signerAddress, averageBalanceContract, getAverageBalance, disconnect],
+    [
+      isReady,
+      userAddress,
+      loading,
+      error,
+      lastProof,
+      lastResult,
+      disconnect,
+      prove,
+      waitForResult,
+      proveAverageBalance,
+    ],
   );
 
   return <VLayerContext.Provider value={value}>{children}</VLayerContext.Provider>;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook
 export const useVLayer = () => {
   const ctx = useContext(VLayerContext);
   if (!ctx) throw new Error('useVLayer debe usarse dentro de <VLayerProvider>');

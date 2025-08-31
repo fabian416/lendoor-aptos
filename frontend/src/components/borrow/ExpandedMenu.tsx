@@ -8,7 +8,7 @@ import { useVLayer } from '@/components/providers/VLayerProvider';
 
 const ExpandedMenu = ({score}) => {
   const isLoggedIn = useIsLoggedIn();
-  const { isReady, signerAddress, getAverageBalance } = useVLayer();
+  const { isReady, userAddress, proveAverageBalance } = useVLayer();
 
   const [loading, setLoading] = useState(false);
   const [avgResult, setAvgResult] = useState<any>(null);
@@ -17,28 +17,31 @@ const ExpandedMenu = ({score}) => {
 
   }
   const onTimeTravel = async () => {
-    if (!isReady || !signerAddress) {
-      setError('Wallet no conectada o provider no listo');
-      return;
-    }
+    console.log(isReady);
+  if (!isReady || !userAddress) {
+    setError('Wallet no conectada o provider no listo');
+    return;
+  }
 
-    try {
-      setLoading(true);
-      setError(undefined);
+  try {
+    setLoading(true);
+    setError(undefined);
 
-      const res = await getAverageBalance(signerAddress);
-      setAvgResult({
-        owner: res.owner,
-        avgBalance: res.avgBalance.toString(),
-        proof: res.proof,
-      });
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message ?? 'Error desconocido');
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Llama al helper del contexto; por defecto usa userAddress si no le pasás owner
+    const res = await proveAverageBalance(userAddress);
+
+    setAvgResult({
+      owner: res.owner,
+      avgBalance: res.avgBalance.toString(),
+      proof: res.proof,
+    });
+  } catch (err: any) {
+    console.error(err);
+    setError(err?.message ?? 'Error desconocido');
+  } finally {
+    setLoading(false);
+  }
+};
 
     return <div className="mt-3 space-y-3">
         <div className="text-xs font-medium text-muted-foreground">CREDIT SCORE</div>
@@ -69,7 +72,7 @@ const ExpandedMenu = ({score}) => {
             </div>
             {isLoggedIn ? (
                 <Button size="sm" className="cursor-pointer h-7" onClick={onTimeTravel}>
-                    Check
+                    Check   
                 </Button>
             ) : (
                 <span className="text-xs">$0</span>
@@ -85,8 +88,8 @@ const ExpandedMenu = ({score}) => {
                 />
             </div>
             {isLoggedIn ? (
-                <Button size="sm" className="cursor-pointer h-7" onClick={onTeleport}>
-                    Check
+                <Button size="sm" className="h-7" disabled onClick={onTeleport}>
+                    Soon..
                 </Button>
             ) : (
                 <span className="text-xs">$0</span>

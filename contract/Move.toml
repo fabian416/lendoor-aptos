@@ -1,0 +1,18 @@
+[package]
+name = "lendoor"
+version = "1.0.0"
+authors = []
+
+[addresses]
+aries = "_"
+aries_config = "_"
+decimal = "_"
+util_types = "_"
+oracle = "_"
+hippo_aggregator = "_"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-framework" }
+AptosStdlib   = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-stdlib" }
+
+[dev-dependencies]

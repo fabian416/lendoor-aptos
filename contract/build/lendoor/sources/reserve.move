@@ -2,7 +2,7 @@
 //! Mostly ported from CToken from Compound.
 module aries::reserve {
     use std::string::{Self};
-    use std::option::{Self, Option};
+    use std::option::{Self};
     use std::vector;
     use std::signer;
 
@@ -13,14 +13,11 @@ module aries::reserve {
     use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
 
     use decimal::decimal::{Self, Decimal};
-    use util_types::map::{Self, Map};
-    use util_types::pair::{Self, Pair};
 
     use aries::controller_config;
     use aries_config::interest_rate_config::{InterestRateConfig};
     use aries::reserve_details::{Self, ReserveDetails};
     use aries_config::reserve_config::{Self, ReserveConfig};
-    use aries::reserve_farm::{Self, RewardConfig, Reward, ReserveFarm};
     use aries::math_utils;
     use aries::utils;
 
@@ -77,8 +74,6 @@ module aries::reserve {
     /// We don't store those statistics in `ReserveCoinContainer` to enable access by `TypeInfo`. 
     struct Reserves has key {
         stats: Table<TypeInfo, ReserveDetails>,
-        /// Liquidity Farming keyed by Reserve's Type, and then `FarmingType`.
-        farms: Table<Pair<TypeInfo, TypeInfo>, ReserveFarm>,
     }
 
     /// The struct to hold all the underlying `Coin`s.
@@ -141,7 +136,6 @@ module aries::reserve {
     struct SyncReserveFarmEvent has drop, store {
         reserve_type: TypeInfo,
         farm_type: TypeInfo,
-        farm: reserve_farm::ReserveFarmRaw,
     }
 
     public(friend) fun init(account: &signer) {
@@ -151,7 +145,6 @@ module aries::reserve {
             account, 
             Reserves {
                 stats: table::new(),
-                farms: table::new(),
             }
         );
     }
@@ -159,55 +152,6 @@ module aries::reserve {
     #[view]
     public fun reserve_state<CoinType>(): ReserveDetails acquires Reserves {
         reserve_details(std_type<CoinType>())
-    }
-
-    #[view]
-    public fun reserve_farm<CoinType, FarmingType>(): Option<reserve_farm::ReserveFarmRaw> acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        let reserve_type_info = std_type<CoinType>();
-        if (reserve_ref_has_farm(reserves, reserve_type_info, std_type<FarmingType>())) {
-            let farm = borrow_reserve_farm(reserves, reserve_type_info, std_type<FarmingType>());
-            option::some(reserve_farm::reserve_farm_raw(farm))
-        } else {
-            option::none()
-        }
-    }
-    
-    #[view]
-    public fun reserve_farm_map<ReserveType, FarmingType>(): Map<TypeInfo, reserve_farm::Reward> acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        let reserve_type_info = std_type<ReserveType>();
-        if (reserve_ref_has_farm(reserves, reserve_type_info, std_type<FarmingType>())) {
-            let farm = borrow_reserve_farm(reserves, reserve_type_info, std_type<FarmingType>());
-            reserve_farm::get_latest_reserve_farm_view(farm)
-        } else {
-            map::new()
-        }
-    }
-
-    #[view]
-    /// Return reward detail of specified (Reserve, Farming, RewardCoin)
-    /// # Returns
-    ///
-    /// * `u128`: total share of reward pool
-    /// * `u128`: reward per share distributed in decimal(`@aries::decimal::Decimal`)
-    /// * `u128`: remaining reward of the pool
-    /// * `u128`: reward per day to be distributed(configed in advance)
-    public fun reserve_farm_coin<ReserveType, FarmingType, RewardCoin>(): (u128, u128, u128, u128) acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        let reserve_type_info = std_type<ReserveType>();
-        if (reserve_ref_has_farm(reserves, reserve_type_info, std_type<FarmingType>())) {
-            let farm = borrow_reserve_farm(reserves, reserve_type_info, std_type<FarmingType>());
-            let reward = reserve_farm::get_latest_reserve_reward_view(farm, std_type<RewardCoin>());
-            (
-                reserve_farm::get_share(farm),
-                decimal::raw(reserve_farm::reward_per_share(&reward)),
-                reserve_farm::remaining_reward(&reward),
-                reserve_farm::reward_per_day(&reward)
-            )
-        } else {
-            (0, 0, 0, 0)
-        }
     }
 
     #[test_only]
@@ -654,138 +598,6 @@ module aries::reserve {
         assert!(exists<Reserves>(@aries), ERESERVE_NOT_EXIST);
     }
 
-    public fun reserve_has_farm<FarmingType>(
-        reserve_type_info: TypeInfo
-    ): bool acquires Reserves {
-        let reserves = borrow_global<Reserves>(@aries);
-        reserve_ref_has_farm(reserves, reserve_type_info, std_type<FarmingType>())
-    }
-
-    /// Whether there is a ReserveFarm given reserve and farming type.
-    fun reserve_ref_has_farm(
-        reserves: &Reserves,
-        reserve_type_info: TypeInfo,
-        farming_type_info: TypeInfo
-    ): bool {
-        let key = pair::new(reserve_type_info, farming_type_info);
-        table::contains(&reserves.farms, key)
-   }
-
-    fun borrow_reserve_farm(
-        reserves: &Reserves,
-        reserve_type_info: TypeInfo,
-        farming_type_info: TypeInfo
-    ): &ReserveFarm {
-        assert!(reserve_ref_has_farm(reserves, reserve_type_info, farming_type_info), ERESERVE_FARM_NOT_FOUND);
-        let key = pair::new(reserve_type_info, farming_type_info);
-        table::borrow(&reserves.farms, key)
-    }
-
-    fun borrow_reserve_farm_mut(
-        reserves: &mut Reserves,
-        reserve_type_info: TypeInfo,
-        farming_type_info: TypeInfo
-    ): &mut ReserveFarm {
-        assert!(reserve_ref_has_farm(reserves, reserve_type_info, farming_type_info), ERESERVE_FARM_NOT_FOUND);
-        let key = pair::new(reserve_type_info, farming_type_info);
-        table::borrow_mut(&mut reserves.farms, key)
-    }
-
-    public fun get_reserve_rewards<FarmingType>(
-        reserve_type_info: TypeInfo,
-    ): Map<TypeInfo, Reward> acquires Reserves {
-        get_reserve_rewards_ti(reserve_type_info, std_type<FarmingType>())
-    }
-    
-    public fun get_reserve_rewards_ti(
-        reserve_type_info: TypeInfo,
-        farming_type_info: TypeInfo
-    ): Map<TypeInfo, Reward> acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        let farm = borrow_reserve_farm_mut(reserves, reserve_type_info, farming_type_info);
-        reserve_farm::get_rewards(farm)
-    }
-
-    public(friend) fun update_reward_config<
-        ReserveCoin, FarmingType, RewardCoin
-    >(new_config: RewardConfig) acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        let farm = borrow_reserve_farm_mut(reserves, type_info<ReserveCoin>(), std_type<FarmingType>());
-        reserve_farm::update_reward_config(farm, std_type<RewardCoin>(), new_config);
-    }
-
-    /// Add reserve liquidity farming reward, and may create a new entry
-    public(friend) fun add_reward<
-        ReserveCoin, FarmingType, RewardCoin
-    >(amount: u64) acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        let key = pair::new(type_info<ReserveCoin>(), std_type<FarmingType>());
-        if (!table::contains(&reserves.farms, key)) {
-            table::add(&mut reserves.farms, key, reserve_farm::new())
-        };
-        let farm = table::borrow_mut(&mut reserves.farms, key);
-        reserve_farm::add_reward(farm, std_type<RewardCoin>(), (amount as u128));
-    }
-
-    public(friend) fun remove_reward<
-        ReserveCoin, FarmingType, RewardCoin
-    >(amount: u64) acquires Reserves {
-        remove_reward_ti(
-            type_info<ReserveCoin>(),
-            std_type<FarmingType>(),
-            std_type<RewardCoin>(),
-            amount
-        )
-    }
-
-    public(friend) fun remove_reward_ti(
-        reserve_type_info: TypeInfo,
-        farming_type_info: TypeInfo,
-        reward_coin_info: TypeInfo,
-        amount: u64
-    ) acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        let farm = borrow_reserve_farm_mut(reserves, reserve_type_info, farming_type_info);
-        reserve_farm::remove_reward(farm, reward_coin_info, (amount as u128));
-    }
-
-    /// Acquires and updates on the global storage. 
-    /// In production this function should be only called by `profile::try_add_or_init_profile_reward_share`.
-    /// So we can ensure the share amount is synced between the reserve and every profile.
-    public(friend) fun try_add_reserve_reward_share<FarmingType>(
-        reserve_type_info: TypeInfo,
-        shares: u128
-    ) acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        if (reserve_ref_has_farm(reserves, reserve_type_info, std_type<FarmingType>())) {
-            let farm = borrow_reserve_farm_mut(reserves, reserve_type_info, std_type<FarmingType>());
-            reserve_farm::add_share(farm, shares);
-
-            aptos_std::event::emit(SyncReserveFarmEvent {
-                reserve_type: reserve_type_info,
-                farm_type: std_type<FarmingType>(),
-                farm: reserve_farm::reserve_farm_raw(farm),
-            });
-        };
-    }
-
-    public(friend) fun try_remove_reserve_reward_share<FarmingType>(
-        reserve_type_info: TypeInfo,
-        shares: u128
-    ) acquires Reserves {
-        let reserves = borrow_global_mut<Reserves>(@aries);
-        if (reserve_ref_has_farm(reserves, reserve_type_info, std_type<FarmingType>())) {
-            let farm = borrow_reserve_farm_mut(reserves, reserve_type_info, std_type<FarmingType>());
-            reserve_farm::remove_share(farm, shares);
-
-            aptos_std::event::emit(SyncReserveFarmEvent {
-                reserve_type: reserve_type_info,
-                farm_type: std_type<FarmingType>(),
-                farm: reserve_farm::reserve_farm_raw(farm),
-            });
-        };
-    }
-
     /// A portion of liquidation bonus will be reserved into the protocol treasury.
     public fun charge_liquidation_fee<Coin0>(
         withdrawal_lp_coin: Coin<LP<Coin0>>
@@ -828,8 +640,6 @@ module aries::reserve {
     }
 
     // Specifications
-
-    use aptos_framework::coin::{CoinInfo};
 
     spec module {
     }

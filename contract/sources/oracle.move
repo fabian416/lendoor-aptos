@@ -58,7 +58,6 @@ module oracle::oracle {
         }
     }
 
-    /// Versión pública para llamadas externas / vistas: genérica, sin TypeInfo como parámetro.
     #[view]
     public fun get_price<OracleKey>(): Decimal acquires OracleStore {
         get_price_ti(type_info::type_of<OracleKey>())

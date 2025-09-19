@@ -12,14 +12,9 @@ module aries::profile {
     use aptos_framework::account;
     
     use aries::reserve::{Self};
-    use aries_config::reserve_config::{DepositFarming, BorrowFarming};
-    use aries::profile_farm::{Self, ProfileFarm};
-    use aries::utils;
     use decimal::decimal::{Self, Decimal};
     use util_types::iterable_table::{Self as iterable_table, IterableTable};
-    use util_types::pair::{Self as pair, Pair};
     use oracle::oracle;
-    use util_types::map::{Self as map, Map};
     use aries::emode_category::{Self as emode_category};
 
     friend aries::controller;
@@ -84,12 +79,8 @@ module aries::profile {
     struct Profile has key {
         /// All reserves that the user has deposited into.
         deposited_reserves: IterableTable<TypeInfo, Deposit>,
-        /// All reserves that the user has deposited into that has deposit farming
-        deposit_farms: IterableTable<TypeInfo, ProfileFarm>,
         /// All reserves that the user has borrowed from.
         borrowed_reserves: IterableTable<TypeInfo, Loan>,
-        /// All reserves that the user has borrowed from that has borrow farming
-        borrow_farms: IterableTable<TypeInfo, ProfileFarm>,
     }
 
     struct Deposit has store, drop {
@@ -116,7 +107,6 @@ module aries::profile {
         profile_name: string::String,
         reserve_type: TypeInfo,
         collateral_amount: u64,
-        farm: Option<profile_farm::ProfileFarmRaw>,
     }
 
     #[event]
@@ -125,7 +115,6 @@ module aries::profile {
         profile_name: string::String,
         reserve_type: TypeInfo,
         borrowed_share_decimal: u128,
-        farm: Option<profile_farm::ProfileFarmRaw>,
     }
 
     fun move_profiles_to(account: &signer, profiles: Profiles) {
@@ -170,9 +159,7 @@ module aries::profile {
             &profile_signer,
             Profile {
                 deposited_reserves: iterable_table::new(),
-                deposit_farms: iterable_table::new(),
                 borrowed_reserves: iterable_table::new(),
-                borrow_farms: iterable_table::new(),
             }
         )
     }
@@ -238,52 +225,6 @@ module aries::profile {
             decimal::raw(borrowed_share),
             decimal::raw(reserve::get_borrow_amount_from_share_dec(reserve_type, borrowed_share))
         )
-    }
-
-    #[view]
-    public fun profile_farm<ReserveType, FarmingType>(user_addr: address, profile_name: string::String): Option<profile_farm::ProfileFarmRaw> acquires Profiles, Profile {
-        let profile_account = get_profile_account(user_addr, &profile_name);
-        let profile = borrow_global_mut<Profile>(signer::address_of(&profile_account));
-        let reserve_type = type_info::type_of<ReserveType>();
-        let farming_type = type_info::type_of<FarmingType>();
-
-        let farms = borrow_farms(profile, farming_type);
-        if (iterable_table::contains(farms, &reserve_type)) {
-            let f = iterable_table::borrow(farms, &reserve_type);
-            let raw = profile_farm::profile_farm_raw(f);
-            let reserve_rewards = reserve::reserve_farm_map<ReserveType, FarmingType>();
-            profile_farm::accumulate_profile_farm_raw(&mut raw, &reserve_rewards);
-            option::some(raw)
-        } else {
-            option::none()
-        }
-    }
-
-    #[view]
-    /// Return reward detail of specified (Reserve, Farming, RewardCoin)
-    /// # Returns
-    ///
-    /// * `u128`: uncliamed reward amount in decimal(`@aries::decimal::Decimal`)
-    /// * `u128`: last reward per share distributed in decimal
-    public fun profile_farm_coin<ReserveType, FarmingType, RewardCoin>(user_addr: address, profile_name: string::String): (u128, u128) acquires Profiles, Profile {
-        let profile_account = get_profile_account(user_addr, &profile_name);
-        let profile = borrow_global_mut<Profile>(signer::address_of(&profile_account));
-        let reserve_type = type_info::type_of<ReserveType>();
-
-        let farms = borrow_farms(profile, type_info::type_of<FarmingType>());
-        if (iterable_table::contains(farms, &reserve_type)) {
-            let farm = iterable_table::borrow(farms, &reserve_type);
-            let raw = profile_farm::profile_farm_reward_raw(farm, type_info::type_of<RewardCoin>());
-            let (_, current_reward_per_share, _, _) = reserve::reserve_farm_coin<ReserveType, FarmingType, RewardCoin>();
-            profile_farm::accumulate_profile_reward_raw(
-                &mut raw, 
-                profile_farm::get_share(farm), 
-                decimal::from_scaled_val(current_reward_per_share)
-            );
-            profile_farm::unwrap_profile_reward_raw(raw)
-        } else {
-            (0, 0)
-        }
     }
 
     fun get_profile_account(user_addr: address, profile_name: &string::String): signer acquires Profiles {
@@ -528,14 +469,6 @@ module aries::profile {
         );
 
         deposited_reserve.collateral_amount = deposited_reserve.collateral_amount + amount;
-
-        // We keep deposit share the same as collateralized LP coin amount. 
-        // Need to be in sync with the amount we record in reserve farming.
-        try_add_or_init_profile_reward_share<DepositFarming>(
-            profile,
-            reserve_type_info,
-            (amount as u128)
-        );
     }
 
     public(friend) fun deposit(
@@ -605,7 +538,7 @@ module aries::profile {
         profile: &mut Profile,
         reserve_type_info: TypeInfo,
         amount: u64
-    ): u128 {
+    ) {
         assert!(!iterable_table::contains<TypeInfo, Loan>(&profile.borrowed_reserves, &reserve_type_info), EPROFILE_NO_BORROWED_RESERVE);
         assert!(
             iterable_table::contains<TypeInfo, Deposit>(
@@ -628,12 +561,6 @@ module aries::profile {
                 &mut profile.deposited_reserves, &reserve_type_info
             );
         };
-
-        try_subtract_profile_reward_share<DepositFarming>(
-            profile,
-            reserve_type_info,
-            (amount as u128)
-        )
     }
 
     public(friend) fun withdraw(
@@ -748,13 +675,6 @@ module aries::profile {
         );
         borrowed_reserve.borrowed_share = decimal::add(borrowed_reserve.borrowed_share, borrowed_share);
 
-        // We keep deposit share the same as collateralized LP coin amount. 
-        // Need to be in sync with the amount we record in reserve farming.
-        try_add_or_init_profile_reward_share<BorrowFarming>(
-            profile,
-            reserve_type_info,
-            decimal::as_u128(borrowed_share)
-        );
     }
 
     fun repay_profile(
@@ -786,14 +706,6 @@ module aries::profile {
                 &reserve_type_info
             );
         };
-
-        // We remove borrow reward share the same with borrowed share. 
-        // It should be the same as the amount removed in reserve farming.
-        try_subtract_profile_reward_share<BorrowFarming>(
-            profile,
-            reserve_type_info,
-            decimal::as_u128(settle_share_amount)
-        );
 
         actual_repay_amount
     }
@@ -957,244 +869,7 @@ module aries::profile {
             );
         };
 
-        try_subtract_profile_reward_share<BorrowFarming>(
-            profile,
-            repay_reserve_type_info,
-            decimal::as_u128(settled_share_amount)
-        );
-        
-        try_subtract_profile_reward_share<DepositFarming>(
-            profile,
-            withdraw_reserve_type_info,
-            (withdraw_amount as u128)
-        );
-
         (actual_repay_amount, withdraw_amount)
-    }
-
-    public(friend) fun claim_reward<FarmingType>(
-        user_addr: address,
-        name: &string::String,
-        reserve_type_info: TypeInfo,
-        reward_type: TypeInfo,
-    ): u64 acquires Profiles, Profile {
-        claim_reward_ti(
-            user_addr,
-            name,
-            reserve_type_info,
-            type_info::type_of<FarmingType>(),
-            reward_type
-        )
-    }
-
-    public(friend) fun claim_reward_ti(
-        user_addr: address,
-        name: &string::String,
-        reserve_type_info: TypeInfo,
-        farming_type: TypeInfo,
-        reward_type: TypeInfo,
-    ): u64 acquires Profiles, Profile {
-        let profile_account = get_profile_account(user_addr, name);
-        let profile = borrow_global_mut<Profile>(signer::address_of(&profile_account));
-        let farms = borrow_farms_mut(profile, farming_type);
-        assert!(iterable_table::contains(farms, &reserve_type_info), 0);
-        let profile_farm = iterable_table::borrow_mut(farms, &reserve_type_info);
-        let reserve_rewards = reserve::get_reserve_rewards_ti(reserve_type_info, farming_type);
-        let claimable_amount = profile_farm::claim_reward(profile_farm, &reserve_rewards, reward_type);
-
-        if (farming_type == type_info::type_of<DepositFarming>()) {
-            emit_deposit_event(user_addr, name, profile, reserve_type_info);
-        } else {
-            assert!(farming_type == type_info::type_of<BorrowFarming>(), 0);
-            emit_borrow_event(user_addr, name, profile, reserve_type_info);
-        };
-
-        claimable_amount
-    }
-
-    fun borrow_farms(
-        profile: &Profile,
-        farming_type: TypeInfo,
-    ): &IterableTable<TypeInfo, ProfileFarm> {
-        if (farming_type == type_info::type_of<DepositFarming>()) {
-            &profile.deposit_farms 
-        } else {
-            if (farming_type == type_info::type_of<BorrowFarming>()) {
-                &profile.borrow_farms 
-            } else {
-                abort(0)
-            }
-        }
-    }
-
-    fun borrow_farms_mut(
-        profile: &mut Profile,
-        farming_type: TypeInfo,
-    ): &mut IterableTable<TypeInfo, ProfileFarm> {
-        if (farming_type == type_info::type_of<DepositFarming>()) {
-            &mut profile.deposit_farms 
-        } else {
-            if (farming_type == type_info::type_of<BorrowFarming>()) {
-                &mut profile.borrow_farms 
-            } else {
-                abort(0)
-            }
-        }
-    }
-
-    public fun try_add_or_init_profile_reward_share<FarmingType>(
-        profile: &mut Profile,
-        reserve_type_info: TypeInfo,
-        share_amount: u128
-    ) {
-        if (reserve::reserve_has_farm<FarmingType>(reserve_type_info)) {
-            let reserve_rewards = reserve::get_reserve_rewards<FarmingType>(reserve_type_info);
-            let farms = borrow_farms_mut(profile, type_info::type_of<FarmingType>());
-            if (!iterable_table::contains(farms, &reserve_type_info)) {
-                iterable_table::add(farms, reserve_type_info, profile_farm::new(&reserve_rewards));
-            };
-            let profile_farm = iterable_table::borrow_mut(farms, &reserve_type_info);
-            profile_farm::add_share(profile_farm, &reserve_rewards, share_amount);
-            reserve::try_add_reserve_reward_share<FarmingType>(reserve_type_info, share_amount);
-        };
-    }
-    
-    /// There are three consequences for this operation:
-    /// 1. There is no corresponding reserve reward or profile reward entry. So nothing will happen.
-    /// 2. There are more or equal profile reward shares than the input share amount. The reward will be partially reduced.
-    /// 3. There are less profile reward shares than the input share amount. 
-    ///    This is possible when the account has deposited/borrowed before the reserve having liquidity farming incentives.
-    ///    We will clear the profile shares in this case.
-    /// 
-    /// Returns: amount of the removed shares
-    public fun try_subtract_profile_reward_share<FarmingType>(
-        profile: &mut Profile,
-        reserve_type_info: TypeInfo,
-        share_amount: u128
-    ): u128 {
-        let removed_share = 0;
-        if (reserve::reserve_has_farm<FarmingType>(reserve_type_info)) {
-            let farms = borrow_farms_mut(profile, type_info::type_of<FarmingType>());
-            if (iterable_table::contains(farms, &reserve_type_info)) {
-                let reserve_rewards = reserve::get_reserve_rewards<FarmingType>(reserve_type_info);
-                let profile_farm = iterable_table::borrow_mut(farms, &reserve_type_info);
-                removed_share = profile_farm::try_remove_share(profile_farm, &reserve_rewards, share_amount);
-                reserve::try_remove_reserve_reward_share<FarmingType>(reserve_type_info, removed_share);
-            };
-        };
-        removed_share
-    }
-
-    /// Returns (reserve_type, farming_type)
-    fun list_farm_reward_keys_of_coin<FarmingType, RewardCoin>(
-        profile: &Profile,
-    ): vector<Pair<TypeInfo, TypeInfo>> {
-        let ret: vector<Pair<TypeInfo, TypeInfo>> = vector::empty();
-        let farm = if (utils::type_eq<FarmingType, DepositFarming>()) {
-            &profile.deposit_farms 
-        } else {
-            if (utils::type_eq<FarmingType, BorrowFarming>()) {
-                &profile.borrow_farms 
-            } else {
-                abort(0)
-            }
-        };
-        
-        let farming_type = type_info::type_of<FarmingType>();
-        let reward_type = type_info::type_of<RewardCoin>();
-        let key = iterable_table::head_key(farm);
-        while (option::is_some(&key)) {
-            let reserve_type = *option::borrow(&key);
-            let (p_farm, _, next)= iterable_table::borrow_iter(farm, &reserve_type);
-            if (profile_farm::has_reward(p_farm, reward_type)) {
-                vector::push_back(&mut ret, pair::new(reserve_type, farming_type));
-            };
-            key = next;
-        };
-        ret
-    }
-
-    public fun list_claimable_reward_of_coin<RewardCoin>(
-        user_addr: address,
-        name: &string::String,
-    ): vector<Pair<TypeInfo, TypeInfo>> acquires Profiles, Profile {
-        let profile_account = get_profile_account(user_addr, name);
-        let profile = borrow_global<Profile>(signer::address_of(&profile_account));
-        let ret: vector<Pair<TypeInfo, TypeInfo>> = vector::empty();
-
-        vector::append(&mut ret, list_farm_reward_keys_of_coin<DepositFarming, RewardCoin>(profile));
-        vector::append(&mut ret, list_farm_reward_keys_of_coin<BorrowFarming, RewardCoin>(profile));
-
-        ret
-    }
-
-    // Read the aggregated claimable rewards amount of the specified profile
-    // Both DepositFarming and BorrowFarming will be returned
-    // returns: vector<TypeInfo> is a list of reward coins
-    //          vector<u64> is a list of reward amount with the same order as above
-    #[view]
-    public fun claimable_reward_amounts(
-        user_addr: address, 
-        name: string::String
-    ): (vector<TypeInfo>, vector<u64>) acquires Profiles, Profile {
-        let profile_account = get_profile_account(user_addr, &name);
-        let profile = borrow_global<Profile>(signer::address_of(&profile_account));
-
-        let deposit_rewards_claimable = profile_farms_claimable<DepositFarming>(profile);
-        let borrow_rewards_claimable = profile_farms_claimable<BorrowFarming>(profile);
-
-        let (deposit_reward_coins, deposit_reward_amounts) = map::to_vec_pair(&deposit_rewards_claimable);
-        let len = vector::length(&deposit_reward_coins);
-        let i = 0;
-        while (i < len) {
-            let coin_type = *vector::borrow(&deposit_reward_coins, i);
-            let amount = *vector::borrow(&deposit_reward_amounts, i);
-            if (map::contains(&borrow_rewards_claimable, &coin_type)) {
-                amount = amount + map::get(&borrow_rewards_claimable, &coin_type);
-                *map::borrow_mut(&mut borrow_rewards_claimable, &coin_type) = amount;
-            } else {
-                map::add(&mut borrow_rewards_claimable, coin_type, amount);
-            };
-
-            i = i + 1;
-        };
-
-        map::to_vec_pair(&borrow_rewards_claimable)
-    }
-
-    // Read the aggregated claimable rewards amount of the specified profile and farming type
-    // returns: vector<TypeInfo> is a list of reward coins
-    //          vector<u64> is a list of reward amount with the same order as above
-    #[view]
-    public fun claimable_reward_amount_on_farming<FarmingType>(
-        user_addr: address, 
-        name: string::String
-    ): (vector<TypeInfo>, vector<u64>) acquires Profiles, Profile {
-        let profile_account = get_profile_account(user_addr, &name);
-        let profile = borrow_global<Profile>(signer::address_of(&profile_account));
-
-        let rewards_claimable = profile_farms_claimable<FarmingType>(profile);
-        map::to_vec_pair(&rewards_claimable)
-    }
-
-    fun profile_farms_claimable<FarmingType>(profile: &Profile): Map<TypeInfo, u64> {
-        let farms = if (utils::type_eq<FarmingType, DepositFarming>()) {
-            &profile.deposit_farms 
-        } else {
-            assert!(utils::type_eq<FarmingType, BorrowFarming>(), EPROFILE_INVALID_FARMING_TYPE);
-            &profile.borrow_farms 
-        };
-
-        let rewards_claimable = map::new<TypeInfo, u64>();
-        let reserve_key = iterable_table::head_key(farms);
-        while (option::is_some(&reserve_key)) {
-            let reserve_type = *option::borrow(&reserve_key);
-            let (p_farm, _, next)= iterable_table::borrow_iter(farms, &reserve_type);
-            profile_farm::aggregate_all_claimable_rewards(p_farm, &mut rewards_claimable);
-            reserve_key = next;
-        };
-
-        rewards_claimable
     }
 
 
@@ -1219,18 +894,11 @@ module aries::profile {
         } else {
             0
         };
-        let farm = if (iterable_table::contains(&profile.deposit_farms, &reserve_type)) {
-            let f = iterable_table::borrow(&profile.deposit_farms, &reserve_type);
-            option::some(profile_farm::profile_farm_raw(f))
-        } else {
-            option::none()
-        };
         event::emit(SyncProfileDepositEvent {
             user_addr: user_addr,
             profile_name: *profile_name,
             reserve_type: reserve_type,
             collateral_amount: collateral_amount,
-            farm: farm,
         })
     }
 
@@ -1245,18 +913,11 @@ module aries::profile {
         } else {
             decimal::zero()
         };
-        let farm = if (iterable_table::contains(&profile.borrow_farms, &reserve_type)) {
-            let f = iterable_table::borrow(&profile.borrow_farms, &reserve_type);
-            option::some(profile_farm::profile_farm_raw(f))
-        } else {
-            option::none()
-        };
         event::emit(SyncProfileBorrowEvent {
             user_addr: user_addr,
             profile_name: *profile_name,
             reserve_type: reserve_type,
             borrowed_share_decimal: decimal::raw(borrowed_share),
-            farm: farm,
         })
     }
 

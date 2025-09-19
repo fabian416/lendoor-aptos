@@ -1,10 +1,10 @@
 module aries::controller {
     use std::signer;
-    use std::option::{Self, Option};
+    use std::option::{Self};
     use std::string::{Self, String};
 
     use aptos_std::event::{Self};
-    use aptos_std::type_info::{Self, TypeInfo};
+    use aptos_std::type_info::{Self};
 
     use aptos_framework::coin::{Self, Coin};
     use aptos_framework::fungible_asset::{Metadata};
@@ -18,8 +18,6 @@ module aries::controller {
     use aries_config::interest_rate_config;
     use aries::reserve::{Self, LP};
     use aries_config::reserve_config;
-    use aries::reserve_farm;
-    use aries::reward_container;
     use aries::profile;
     use aries::utils;
     use aries::emode_category;
@@ -147,33 +145,6 @@ module aries::controller {
     }
 
     #[event]
-    struct AddRewardEvent<phantom ReserveCoin, phantom FarmingType, phantom RewardCoin> has drop, store {
-        signer_addr: address,
-        amount: u64,
-    }
-
-    #[event]
-    struct RemoveRewardEvent<phantom ReserveCoin, phantom FarmingType, phantom RewardCoin> has drop, store {
-        signer_addr: address,
-        amount: u64,
-    }
-
-    #[event]
-    struct ClaimRewardEvent<phantom RewardCoin> has drop, store {
-        user_addr: address,
-        profile_name: string::String,
-        reserve_type: TypeInfo,
-        farming_type: TypeInfo,
-        reward_amount: u64,
-    }
-
-    #[event]
-    struct UpdateRewardConfigEvent<phantom ReserveCoin, phantom FarmingType, phantom RewardCoin> has drop, store {
-        signer_addr: address,
-        config: reserve_farm::RewardConfig,
-    }
-
-    #[event]
     struct UpdateReserveConfigEvent<phantom CoinType> has drop, store {
         signer_addr: address,
         config: reserve_config::ReserveConfig, 
@@ -183,24 +154,6 @@ module aries::controller {
     struct UpdateInterestRateConfigEvent<phantom CoinType> has drop, store {
         signer_addr: address,
         config: interest_rate_config::InterestRateConfig,
-    }
-
-    #[event]
-    struct BeginFlashLoanEvent<phantom CoinType> has drop, store {
-        user_addr: address,
-        profile_name: string::String,
-        amount_in: u64,
-        withdraw_amount: u64,
-        borrow_amount: u64,
-    }
-
-    #[event]
-    struct EndFlashLoanEvent<phantom CoinType> has drop, store {
-        user_addr: address,
-        profile_name: string::String,
-        amount_in: u64,
-        repay_amount: u64,
-        deposit_amount: u64,
     }
 
     #[event]
@@ -240,11 +193,6 @@ module aries::controller {
         reserve::init(account);
         oracle::init(account, admin_addr);
         emode_category::init(account, admin_addr);
-    }
-
-    public entry fun init_reward_container<Coin0>(account: &signer) {
-        assert!(signer::address_of(account) == @aries, ECONTROLLER_NOT_ARIES);
-        reward_container::init_container<Coin0>(account);
     }
 
     public entry fun init_emode(account: &signer) {
@@ -647,109 +595,6 @@ module aries::controller {
         amount: u64
     ) {
        liquidate_impl<RepayCoin, WithdrawCoin>(liquidator_account, liquidatee_addr, liquidatee_profile_name, amount, true);
-    }
-
-
-    public entry fun add_reward<ReserveCoin, FarmingType, RewardCoin>(
-        admin: &signer,
-        amount: u64
-    ) {
-        controller_config::assert_is_admin(signer::address_of(admin));
-        let admin_addr = signer::address_of(admin);
-        assert!(coin::balance<RewardCoin>(admin_addr) >= amount, 0);
-        reserve::add_reward<ReserveCoin, FarmingType, RewardCoin>(amount);
-        let reward_coin = coin::withdraw<RewardCoin>(admin, amount);
-        // TODO: init reward container on demand
-        reward_container::add_reward<ReserveCoin, FarmingType, RewardCoin>(reward_coin);
-
-        event::emit(AddRewardEvent<ReserveCoin, FarmingType, RewardCoin> {
-            signer_addr: signer::address_of(admin),
-            amount: amount,
-        });
-    }
-
-    public entry fun remove_reward<ReserveCoin, FarmingType, RewardCoin>(
-        admin: &signer,
-        amount: u64
-    ) {
-        controller_config::assert_is_admin(signer::address_of(admin));
-        reserve::remove_reward<ReserveCoin, FarmingType, RewardCoin>(amount);
-        let removed_coin = reward_container::remove_reward<ReserveCoin, FarmingType, RewardCoin>(amount);
-        utils::deposit_coin<RewardCoin>(admin, removed_coin);
-
-        event::emit(RemoveRewardEvent<ReserveCoin, FarmingType, RewardCoin> {
-            signer_addr: signer::address_of(admin),
-            amount: amount,
-        });
-    }
-
-    public entry fun claim_reward<ReserveCoin, FarmingType, RewardCoin>(
-        account: &signer,
-        profile_name: vector<u8>,
-    ) {
-        claim_reward_ti<RewardCoin>(
-            account,
-            profile_name,
-            reserve::type_info<ReserveCoin>(),
-            type_info::type_of<FarmingType>(),
-        );
-    }
-
-    public entry fun claim_reward_for_profile<ReserveCoin, FarmingType, RewardCoin>(
-        account: &signer,
-        profile_name: string::String,
-    ) {
-        claim_reward_ti<RewardCoin>(
-            account,
-            *string::bytes(&profile_name),
-            reserve::type_info<ReserveCoin>(),
-            type_info::type_of<FarmingType>(),
-        );
-    }
-
-    public fun claim_reward_ti<RewardCoin>(
-        account: &signer,
-        profile_name: vector<u8>,
-        reserve_type: TypeInfo,
-        farming_type: TypeInfo,
-    ) {
-        let addr = signer::address_of(account);
-        let profile_name = string::utf8(profile_name);
-        let claimable_amount = profile::claim_reward_ti(
-            addr,
-            &profile_name,
-            reserve_type,
-            farming_type,
-            type_info::type_of<RewardCoin>()
-        );
-        let reward_coin = reward_container::remove_reward_ti<RewardCoin>(
-            reserve_type,
-            farming_type,
-            claimable_amount
-        );
-        utils::deposit_coin<RewardCoin>(account, reward_coin);
-
-        event::emit(ClaimRewardEvent<RewardCoin> {
-            user_addr: signer::address_of(account),
-            profile_name: profile_name,
-            reserve_type: reserve_type,
-            farming_type: farming_type,
-            reward_amount: claimable_amount,
-        })
-    }
-
-    public entry fun update_reward_rate<ReserveCoin, FarmingType, RewardCoin>(
-        admin: &signer,
-        reward_per_day: u128,
-    ) {
-        controller_config::assert_is_admin(signer::address_of(admin));
-        let new_config = reserve_farm::new_reward_config(reward_per_day);
-        reserve::update_reward_config<ReserveCoin, FarmingType, RewardCoin>(new_config);
-
-        event::emit(UpdateRewardConfigEvent<ReserveCoin, FarmingType, RewardCoin> {
-            signer_addr: signer::address_of(admin),
-            config: new_config,
-        });
     }
 
     public entry fun update_reserve_config<Coin0>(

@@ -16,7 +16,6 @@ module aries_config::reserve_config {
         borrow_limit: u64,
         allow_collateral: bool,
         allow_redeem: bool,
-        flash_loan_fee_hundredth_bips: u64,
     }
 
     public fun default_config(): ReserveConfig {
@@ -33,7 +32,6 @@ module aries_config::reserve_config {
             borrow_limit: 18446744073709551615,
             allow_collateral: true,
             allow_redeem: true,
-            flash_loan_fee_hundredth_bips: 0,
         }
     }
 
@@ -53,7 +51,6 @@ module aries_config::reserve_config {
         borrow_limit: u64,
         allow_collateral: bool,
         allow_redeem: bool,
-        flash_loan_fee_hundredth_bips: u64
     ): ReserveConfig {
         ReserveConfig {
             loan_to_value,
@@ -68,7 +65,6 @@ module aries_config::reserve_config {
             borrow_limit,
             allow_collateral,
             allow_redeem,
-            flash_loan_fee_hundredth_bips
         }
     }
 
@@ -85,5 +81,4 @@ module aries_config::reserve_config {
     public fun borrow_limit(c: &ReserveConfig): u64 { c.borrow_limit }
     public fun allow_collateral(c: &ReserveConfig): bool { c.allow_collateral }
     public fun allow_redeem(c: &ReserveConfig): bool { c.allow_redeem }
-    public fun flash_loan_fee_hundredth_bips(c: &ReserveConfig): u64 { c.flash_loan_fee_hundredth_bips }
 }

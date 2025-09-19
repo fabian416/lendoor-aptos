@@ -1,11 +1,8 @@
 //! Controller/Market-wide config storage & access handles
 module aries::controller_config {
     use std::signer;
-    use aries::referral::{Self, ReferralDetails};
 
     friend aries::controller;
-    #[test_only]
-    friend aries::referral_tests;
     #[test_only]
     friend aries::test_utils;
 
@@ -20,7 +17,6 @@ module aries::controller_config {
 
     struct ControllerConfig has key {
         admin: address,
-        referral: ReferralDetails,
     }
 
     public(friend) fun init_config(account: &signer, admin: address) {
@@ -29,7 +25,6 @@ module aries::controller_config {
           account, 
           ControllerConfig{
             admin,
-            referral: referral::new_referral_details()
           }
         );
     }
@@ -51,28 +46,5 @@ module aries::controller_config {
 
     public fun assert_is_admin(addr: address) acquires ControllerConfig {
         assert!(is_admin(addr), ECONTROLLER_ADMIN_MISMATCH);
-    }
-
-    public fun find_referral_fee_sharing_percentage(
-        referrer: address
-    ): u8 acquires ControllerConfig {
-        assert_config_present();
-        let config = borrow_global<ControllerConfig>(@aries);
-        referral::find_fee_sharing_percentage(&config.referral, referrer)
-    }
-
-    public(friend) fun register_or_update_privileged_referrer(
-        admin: &signer,
-        claimant_addr: address, 
-        fee_sharing_percentage: u8
-    ) acquires ControllerConfig {
-        assert_is_admin(signer::address_of(admin));
-
-        let config = borrow_global_mut<ControllerConfig>(@aries);
-        referral::register_or_update_privileged_referrer(
-            &mut config.referral,
-            claimant_addr,
-            fee_sharing_percentage
-        );
     }
 }

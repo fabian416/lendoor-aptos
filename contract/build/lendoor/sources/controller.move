@@ -48,7 +48,6 @@ module aries::controller {
     struct RegisterUserEvent has drop, store {
         user_addr: address,
         default_profile_name: string::String,
-        referrer_addr: option::Option<address>,
     }
 
     #[event]
@@ -327,22 +326,6 @@ module aries::controller {
         event::emit(RegisterUserEvent {
             user_addr: signer::address_of(account),
             default_profile_name: string::utf8(default_profile_name),
-            referrer_addr: option::none(),
-        })
-    }
-
-    public entry fun register_user_with_referrer(
-        account: &signer, 
-        default_profile_name: vector<u8>,
-        referrer_addr: address
-    ) {
-        profile::init_with_referrer(account, referrer_addr);
-        profile::new(account, string::utf8(default_profile_name));
-
-        event::emit(RegisterUserEvent {
-            user_addr: signer::address_of(account),
-            default_profile_name: string::utf8(default_profile_name),
-            referrer_addr: option::some(referrer_addr),
         })
     }
 
@@ -560,12 +543,9 @@ module aries::controller {
         let profile_name_str = string::utf8(profile_name);
         let (withdraw_amount, borrow_amount, check_equity) = profile::withdraw(
             addr, &profile_name_str, reserve::type_info<Coin0>(), amount, allow_borrow);
-        let referrer = profile::get_user_referrer(addr);
-
         let withdraw_coin = withdraw_from_reserve(
             withdraw_amount,
             borrow_amount,
-            referrer
         );
 
         let actual_withdraw_amount = coin::value(&withdraw_coin);
@@ -585,7 +565,6 @@ module aries::controller {
     fun withdraw_from_reserve<Coin0>(
         withdraw_amount: u64,
         borrow_amount: u64,
-        maybe_referrer: Option<address>,
     ): Coin<Coin0> {
         let withdraw_coin = if (withdraw_amount == 0) {
             coin::zero()
@@ -597,7 +576,7 @@ module aries::controller {
         let borrowed_coin = if (borrow_amount == 0) {
             coin::zero()
         } else {
-            reserve::borrow<Coin0>(borrow_amount, maybe_referrer)
+            reserve::borrow<Coin0>(borrow_amount)
         };
         coin::merge<Coin0>(&mut borrowed_coin, withdraw_coin);
         borrowed_coin
@@ -670,106 +649,6 @@ module aries::controller {
        liquidate_impl<RepayCoin, WithdrawCoin>(liquidator_account, liquidatee_addr, liquidatee_profile_name, amount, true);
     }
 
-
-    public entry fun hippo_swap<
-        InCoin, Y, Z, OutCoin, E1, E2, E3
-    >(
-        account: &signer,
-        profile_name: vector<u8>,
-        allow_borrow: bool,
-        amount: u64,
-        minimum_out: u64,
-        num_steps: u8,
-        first_dex_type: u8,
-        first_pool_type: u64,
-        first_is_x_to_y: bool, // first trade uses normal order
-        second_dex_type: u8,
-        second_pool_type: u64,
-        second_is_x_to_y: bool, // second trade uses normal order
-        third_dex_type: u8,
-        third_pool_type: u64,
-        third_is_x_to_y: bool, // second trade uses normal order
-    ) {
-
-        let addr = signer::address_of(account);
-        let profile_name_str = string::utf8(profile_name);
-        let referrer = profile::get_user_referrer(addr);
-
-        let (withdraw_amount, borrow_amount, check_equity) = profile::withdraw(
-            addr, &profile_name_str, reserve::type_info<InCoin>(), amount, allow_borrow);
-        let input_coin = withdraw_from_reserve<InCoin>(
-            withdraw_amount,
-            borrow_amount,
-            referrer
-        );
-        let (option_coin1, option_coin2, option_coin3, output_coin) = hippo_aggregator::aggregator::swap_direct<
-            InCoin, Y, Z, OutCoin, E1, E2, E3
-        >(
-            num_steps,
-            first_dex_type,
-            first_pool_type,
-            first_is_x_to_y,
-            second_dex_type,
-            second_pool_type,
-            second_is_x_to_y,
-            third_dex_type,
-            third_pool_type,
-            third_is_x_to_y,
-            input_coin
-        );
-
-        assert!(coin::value(&output_coin) >= minimum_out, ECONTROLLER_SWAP_MINIMUM_OUT_NOT_MET);
-
-        consume_coin_dust(account, option_coin1);
-        consume_coin_dust(account, option_coin2);
-        consume_coin_dust(account, option_coin3);
-
-        let (deposit_amount, repay_amount) = deposit_and_repay_for<OutCoin>(addr, &profile_name_str, output_coin);
-        profile::check_enough_collateral(check_equity);
-
-        event::emit(SwapEvent<InCoin, OutCoin> {
-            sender: addr,
-            profile_name: profile_name_str,
-            amount_in: amount,
-            amount_min_out: minimum_out,
-            allow_borrow: allow_borrow,
-            in_withdraw_amount: withdraw_amount,
-            in_borrow_amount: borrow_amount,
-            out_deposit_amount: deposit_amount,
-            out_repay_amount: repay_amount,
-        });
-    }
-
-    fun consume_coin_dust<X>(account: &signer, coin_option: Option<coin::Coin<X>>) {
-        if (option::is_some(&coin_option)) {
-            let coin = std::option::destroy_some(coin_option);
-            if (coin::value(&coin) > 0) {
-                utils::deposit_coin(account, coin);
-            } else {
-                coin::destroy_zero(coin);
-            }
-        } else {
-            option::destroy_none(coin_option)
-        }
-    }
-
-    public entry fun register_or_update_privileged_referrer(
-        admin: &signer,
-        claimant_addr: address,
-        fee_sharing_percentage: u8
-    ) {
-        controller_config::register_or_update_privileged_referrer(
-            admin,
-            claimant_addr,
-            fee_sharing_percentage
-        );
-
-        event::emit(UpsertPrivilegedReferrerConfigEvent {
-            signer_addr: signer::address_of(admin),
-            claimant_addr: claimant_addr,
-            fee_sharing_percentage: fee_sharing_percentage,
-        });
-    }
 
     public entry fun add_reward<ReserveCoin, FarmingType, RewardCoin>(
         admin: &signer,
@@ -887,7 +766,6 @@ module aries::controller {
         borrow_limit: u64,
         allow_collateral: bool,
         allow_redeem: bool,
-        flash_loan_fee_hundredth_bips: u64
     ) {
         controller_config::assert_is_admin(signer::address_of(admin));
         let new_reserve_config = reserve_config::new_reserve_config(
@@ -903,7 +781,6 @@ module aries::controller {
             borrow_limit,
             allow_collateral,
             allow_redeem,
-            flash_loan_fee_hundredth_bips
         );
         reserve::update_reserve_config<Coin0>(new_reserve_config);
 
@@ -954,69 +831,6 @@ module aries::controller {
         controller_config::assert_is_admin(signer::address_of(admin));
         let fee_coin = reserve::withdraw_reserve_fee<Coin0>();
         utils::deposit_coin<Coin0>(admin, fee_coin);
-    }
-
-    public fun begin_flash_loan<Coin0>(
-        account: &signer,
-        profile_name: String,
-        amount: u64,
-    ): (profile::CheckEquity, Coin<Coin0>) {
-        let user_addr = signer::address_of(account);
-        let referrer = profile::get_user_referrer(user_addr);
-        let (withdraw_amount, borrow_amount, check_equity) = profile::withdraw_flash_loan(
-            user_addr, &profile_name, reserve::type_info<Coin0>(), amount, true);
-
-        let withdraw_coin = flash_borrow_from_reserve(
-            withdraw_amount,
-            borrow_amount,
-            referrer
-        );
-
-        event::emit(BeginFlashLoanEvent<Coin0> {
-            user_addr: user_addr,
-            profile_name: profile_name,
-            amount_in: amount,
-            withdraw_amount: withdraw_amount,
-            borrow_amount: borrow_amount,
-        });
-
-        (check_equity, withdraw_coin)
-    }
-
-    fun flash_borrow_from_reserve<Coin0>(
-        withdraw_amount: u64,
-        borrow_amount: u64,
-        maybe_referrer: Option<address>,
-    ): Coin<Coin0> {
-        let withdraw_coin = if (withdraw_amount == 0) {
-            coin::zero()
-        } else {
-            let lp_coin = reserve::remove_collateral<Coin0>(withdraw_amount);
-            reserve::redeem<Coin0>(lp_coin)
-        };
-
-        let borrowed_coin = reserve::flash_borrow<Coin0>(borrow_amount, maybe_referrer);
-        coin::merge<Coin0>(&mut borrowed_coin, withdraw_coin);
-        borrowed_coin
-    }
-
-    public fun end_flash_loan<Coin0>(
-        receipt: profile::CheckEquity,
-        repay_coin: Coin<Coin0>
-    ) {
-        let (user_addr, profile_name) = profile::read_check_equity_data(&receipt);
-
-        let amount_in = coin::value(&repay_coin);
-        let (deposit_amount, repay_amount) = deposit_and_repay_for<Coin0>(user_addr, &profile_name, repay_coin);
-        profile::check_enough_collateral(receipt);
-
-        event::emit(EndFlashLoanEvent<Coin0> {
-            user_addr: user_addr,
-            profile_name: profile_name,
-            amount_in: amount_in,
-            deposit_amount: deposit_amount,
-            repay_amount: repay_amount,
-        })
     }
 
     // --- EMode Admin Operations ---

@@ -16,7 +16,6 @@ module aries::reserve {
     use util_types::map::{Self, Map};
     use util_types::pair::{Self, Pair};
 
-    use aries::borrow_type;
     use aries::controller_config;
     use aries_config::interest_rate_config::{InterestRateConfig};
     use aries::reserve_details::{Self, ReserveDetails};
@@ -125,9 +124,6 @@ module aries::reserve {
         // amount that user borrowed without any fee
         actual_borrow_amount: u64,
         platform_fee_amount: u64,
-        referrer_fee_amount: u64,
-        referrer: Option<address>,
-        borrow_type: string::String,
     }
 
     #[event]
@@ -533,51 +529,33 @@ module aries::reserve {
     /// Can only be called by the `Controller`, this is borrow using collateral.
     public(friend) fun borrow<Coin0>(
         amount: u64,
-        maybe_referrer: Option<address>
     ): Coin<Coin0> acquires Reserves, ReserveCoinContainer {
-        borrow_internal(amount, borrow_type::normal_borrow_type(), maybe_referrer)
+        borrow_internal(amount)
     }
 
-    /// Can only be called by the `Controller`, this is flash loan without using collateral.
-    public(friend) fun flash_borrow<Coin0>(
-        amount: u64,
-        maybe_referrer: Option<address>
-    ): Coin<Coin0> acquires Reserves, ReserveCoinContainer {
-        borrow_internal(amount, borrow_type::flash_borrow_type(), maybe_referrer)
-    }
 
     public fun calculate_borrow_fee_using_borrow_type(
         type_info: TypeInfo,
         amount: u64,
-        borrow_type: u8
     ): u64 acquires Reserves {
         let reserve_details = reserve_details(type_info);
-        calculate_fee_amount_from_borrow_type(&reserve_details, amount, borrow_type)
+        calculate_fee_amount_from_borrow_type(&reserve_details, amount)
     }
 
     fun calculate_fee_amount_from_borrow_type(
         reserve_details: &ReserveDetails,
         amount: u64,
-        borrow_type: u8
     ): u64 {
-        if (borrow_type == borrow_type::normal_borrow_type()) {
-            reserve_details::calculate_borrow_fee(reserve_details, amount)
-        } else if (borrow_type == borrow_type::flash_borrow_type()) {
-            reserve_details::calculate_flash_loan_fee(reserve_details, amount)
-        } else {
-            abort(0)
-        }
+        reserve_details::calculate_borrow_fee(reserve_details, amount)
     }
 
     /// We unify the implementation between normal borrow that requires collateral with flash loan that
     /// doesn't requires collateral. The only difference is on the fee that is charged.
     fun borrow_internal<Coin0>(
         amount: u64,
-        borrow_type: u8,
-        maybe_referrer: Option<address>
     ): Coin<Coin0> acquires Reserves, ReserveCoinContainer {
         let reserve_details = reserve_details(type_info<Coin0>());
-        let fee_amount = calculate_fee_amount_from_borrow_type(&reserve_details, amount, borrow_type);
+        let fee_amount = calculate_fee_amount_from_borrow_type(&reserve_details, amount);
         let borrow_amount_with_fee = amount + fee_amount;
         reserve_details::borrow(&mut reserve_details, borrow_amount_with_fee);
         update_reserve_details(type_info<Coin0>(), reserve_details);
@@ -586,32 +564,19 @@ module aries::reserve {
 
         let fee_coin = coin::extract<Coin0>(&mut coins_container.underlying_coin, fee_amount);
         let loan_coins = coin::extract<Coin0>(&mut coins_container.underlying_coin, amount);
-        let (our_fee, maybe_referrer_fee) = distribute_fee_with_referrer(fee_coin, maybe_referrer);
 
-        let platform_fee_amount = coin::value(&our_fee);
-        // Deposit into the fee `Coin`.
-        coin::merge<Coin0>(&mut coins_container.fee, our_fee);
-        let referrer_fee_amount = if (option::is_some(&maybe_referrer_fee)) {
-            let FeeDisbursement { coin, receiver } = option::destroy_some(maybe_referrer_fee);
-            let fee = coin::value(&coin);
-            coin::deposit<Coin0>(receiver, coin);
-            fee
-        } else {
-            option::destroy_none(maybe_referrer_fee);
-            0
-        };
+        let platform_fee_amount = coin::value(&fee_coin);
+        coin::merge<Coin0>(&mut coins_container.fee, fee_coin);
 
         aptos_std::event::emit(DistributeBorrowFeeEvent<Coin0> {
             actual_borrow_amount: amount,
             platform_fee_amount: platform_fee_amount,
-            referrer_fee_amount: referrer_fee_amount,
-            referrer: maybe_referrer,
-            borrow_type: borrow_type::borrow_type_str(borrow_type),
         });
         emit_sync_reserve_detail_event<Coin0>(&reserve_details);
         
         loan_coins
     }
+
 
     /// Can only be called by the `Controller`, relevant book keeping for user should be done on the caller side.
     /// If the `repaying_coin` is more than the user's debt, the additional part will be returned.
@@ -684,34 +649,6 @@ module aries::reserve {
         )
     }
 
-    /// Returns 
-    /// 1. Fees for ours, 
-    /// 2. Fees for the referrer and receiver address 
-    ///    (optional, if we can find one account associated with this key and it has registered this coin)
-    fun distribute_fee_with_referrer<Coin0>(
-        fee_coin: Coin<Coin0>, 
-        maybe_referrer: Option<address>
-    ): (Coin<Coin0>, Option<FeeDisbursement<Coin0>>) {
-        if (option::is_none(&maybe_referrer)
-            || !utils::can_receive_coin<Coin0>(*option::borrow(&maybe_referrer))) {
-            (fee_coin, option::none())
-        } else {
-            let referrer = option::destroy_some(maybe_referrer);
-            let share_pct = controller_config::find_referral_fee_sharing_percentage(referrer);
-            let distribute_fee_amount = math_utils::mul_percentage_u64(
-                coin::value(&fee_coin),
-                (share_pct as u64)
-            );
-            let distribute_coins = coin::extract(&mut fee_coin, distribute_fee_amount);
-            (
-                fee_coin, 
-                option::some(FeeDisbursement {
-                    coin: distribute_coins,
-                    receiver: referrer
-                })
-            )
-        }
-    }
 
     fun assert_reserves_exists() {
         assert!(exists<Reserves>(@aries), ERESERVE_NOT_EXIST);
@@ -893,7 +830,6 @@ module aries::reserve {
     // Specifications
 
     use aptos_framework::coin::{CoinInfo};
-    use aptos_framework::optional_aggregator;
 
     spec module {
     }
@@ -903,9 +839,5 @@ module aries::reserve {
         coin::value<Coin0>(coin_store.underlying_coin)
     }
 
-    spec fun spec_reserve_lp_supply<Coin0>(): num {
-        let maybe_supply = global<CoinInfo<Coin0>>(@aries).supply;
-        let supply = option::borrow(maybe_supply);
-        optional_aggregator::read(supply)
-    }
+
 }

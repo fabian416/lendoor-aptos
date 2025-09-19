@@ -446,9 +446,4 @@ module aries::reserve_details {
             (decimal::ceil_u64(actual_repay_amount), borrowed_share)
         }
     }
-
-    public fun calculate_flash_loan_fee(reserve_details: &ReserveDetails, borrow_amount: u64): u64 {
-        let flash_loan_fee_hundredth_bips = reserve_config::flash_loan_fee_hundredth_bips(&reserve_config(reserve_details));
-        math_utils::mul_millionth_u64(borrow_amount, flash_loan_fee_hundredth_bips)
-    }
 }

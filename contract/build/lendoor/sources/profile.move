@@ -76,7 +76,6 @@ module aries::profile {
 
     struct Profiles has key {
         profile_signers: ref_map::SimpleMap<string::String, account::SignerCapability>,
-        referrer: Option<address>,
     }
 
     /// This is a resource that records a user's all deposits and borrows, 
@@ -140,17 +139,6 @@ module aries::profile {
             account,
             Profiles {
                 profile_signers: ref_map::create(),
-                referrer: option::none(),
-            }
-        );
-    }
-
-    public fun init_with_referrer(account: &signer, referrer: address) {
-        move_profiles_to(
-            account, 
-            Profiles {
-                profile_signers: ref_map::create(),
-                referrer: option::some(referrer)
             }
         );
     }
@@ -220,13 +208,6 @@ module aries::profile {
         let name_str = string::utf8(b"profile");
         string::append(&mut name_str, profile_name);
         name_str
-    }
-
-    #[view]
-    public fun get_user_referrer(user_addr: address): Option<address> acquires Profiles {
-        assert!(exists<Profiles>(user_addr), EPROFILE_NOT_EXIST);
-        let profiles = borrow_global<Profiles>(user_addr);
-        profiles.referrer
     }
 
     #[view]
@@ -662,17 +643,7 @@ module aries::profile {
         amount: u64,
         allow_borrow: bool,
     ): (u64, u64, CheckEquity) acquires Profile, Profiles {
-        withdraw_internal(user_addr, profile_name, reserve_type_info, amount, allow_borrow, 0)
-    }
-
-    public(friend) fun withdraw_flash_loan(
-        user_addr: address,
-        profile_name: &string::String,
-        reserve_type_info: TypeInfo,
-        amount: u64,
-        allow_borrow: bool,
-    ): (u64, u64, CheckEquity) acquires Profile, Profiles {
-        withdraw_internal(user_addr, profile_name, reserve_type_info, amount, allow_borrow, 1)
+        withdraw_internal(user_addr, profile_name, reserve_type_info, amount, allow_borrow)
     }
 
     /// We return a struct hot potato `CheckEquity` to enforce health check after withdraw. The design makes 
@@ -684,7 +655,6 @@ module aries::profile {
         reserve_type_info: TypeInfo,
         amount: u64,
         allow_borrow: bool,
-        borrow_type: u8
     ): (u64, u64, CheckEquity) acquires Profile, Profiles {
         let profile_addr = signer::address_of(&get_profile_account(user_addr, profile_name));
         let profile = borrow_global_mut<Profile>(profile_addr);
@@ -694,8 +664,7 @@ module aries::profile {
             &profile_emode,
             reserve_type_info, 
             amount, 
-            allow_borrow, 
-            borrow_type
+            allow_borrow,
         );
         emit_borrow_event(user_addr, profile_name, profile, reserve_type_info);
         (withdrawal_lp_amount, borrow_amount, CheckEquity {user_addr, profile_name: *profile_name})
@@ -709,7 +678,6 @@ module aries::profile {
         reserve_type_info: TypeInfo,
         amount: u64,
         allow_borrow: bool,
-        borrow_type: u8
     ): (u64, u64) {
         let (withdraw_lp_amount, remaining_borrow_amount) = if (iterable_table::contains(&profile.deposited_reserves, &reserve_type_info)) {
             let deposited_reserve = iterable_table::borrow_mut<TypeInfo, Deposit>(
@@ -733,7 +701,7 @@ module aries::profile {
         };
 
         if (allow_borrow && remaining_borrow_amount > 0) {
-            borrow_profile(profile, profile_emode_id, reserve_type_info, remaining_borrow_amount, borrow_type);
+            borrow_profile(profile, profile_emode_id, reserve_type_info, remaining_borrow_amount);
         } else {
             remaining_borrow_amount = 0;
         };
@@ -763,7 +731,6 @@ module aries::profile {
         profile_emode_id: &Option<string::String>,
         reserve_type_info: TypeInfo,
         amount: u64,
-        borrow_type: u8
     ) {
         assert!(!iterable_table::contains(&profile.deposited_reserves, &reserve_type_info), 0);
         assert!(can_borrow_asset(profile_emode_id, &reserve_type_info), EPROFILE_EMODE_DIFF_WITH_RESERVE);
@@ -771,7 +738,6 @@ module aries::profile {
         let fee_amount = reserve::calculate_borrow_fee_using_borrow_type(
             reserve_type_info,
             amount,
-            borrow_type
         );
         let borrowed_share = reserve::get_share_amount_from_borrow_amount(reserve_type_info, amount + fee_amount);
         

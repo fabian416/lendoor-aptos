@@ -5676,6 +5676,11 @@
     buffer "^6.0.3"
     ethers "6.13.5"
 
+"@zkmelabs/widget@^0.3.6":
+  version "0.3.6"
+  resolved "https://registry.yarnpkg.com/@zkmelabs/widget/-/widget-0.3.6.tgz#ac0fda0532a525f2d9dc07a6f8e3574b1631d5b6"
+  integrity sha512-eKJMigD9ZY0/x89NEd979bq1qxF4522X1pFQMJzKF2ysQCKHY92LwK3zse+zNSktCggRFi0lE5+N9u8HcKu15g==
+
 "@zkpassport/poseidon2@^0.6.2":
   version "0.6.2"
   resolved "https://registry.yarnpkg.com/@zkpassport/poseidon2/-/poseidon2-0.6.2.tgz#2dd865864f1afd25169b63d64eb89a634f91301a"

@@ -11,6 +11,8 @@ import { ArrowLeft, ShieldCheck, CheckCircle } from 'lucide-react'
 import { backendUri } from '@/lib/constants'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import { useUserJourney } from '../providers/UserProvider'
+import { ZkMeWidget, type Provider } from '@zkmelabs/widget'
+
 
 type QRCodeViewProps = {
   onBack: () => void
@@ -284,3 +286,64 @@ export function QRCodeView({
     </div>
   )
 }
+
+
+import AlumnoDB
+
+interface IAlumno{
+  create(name:string):void
+}
+
+
+classAula {
+  alumnoFactoryInstance: classAlumnoBlockchain
+
+  Constructor(){
+    this.alumnoFactoryInstance = new classAlumnoBlockchain();
+  }
+
+  llenarAula(){
+    alumno1 = alumnoFactory.create("Fabi");
+
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+classAlumnod() extends IAlumno{
+  create(name:string){
+    dbConnection.insert(name)
+  }
+}
+
+classAlumnoBlockchain extends IAlumno{
+  create(name:string){
+    RPC.connect.write.create(name)
+  }
+}
+
+classAlumnoRedis extends IAlumno{
+  create(name:string){
+    Redis.connect.insert(name)
+  }
+}
+
+classAlumnoMongo extends IAlumno{
+  create(name:string){
+    Mongo.connect.insert(name)
+  }
+}
+
+const miNuevaAula = new classAula(new )

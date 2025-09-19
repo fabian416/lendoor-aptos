@@ -1,4 +1,4 @@
-module aries_config::interest_rate_config {
+module lendoor_config::interest_rate_config {
     use decimal::decimal::{Self as dec, Decimal};
 
     /// Config mínima para curva de interés. Tu `reserve_details` puede leer estos campos.

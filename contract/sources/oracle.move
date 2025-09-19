@@ -12,23 +12,23 @@ module oracle::oracle {
         prices: SimpleMap<TypeInfo, Decimal>,
     }
 
-    /// Guarda el store en @aries (mismo signer que el resto de singletons).
+    /// Guarda el store en @lendoor (mismo signer que el resto de singletons).
     public fun init(account: &signer, admin: address) {
-        assert!(signer::address_of(account) == @aries, EADMIN_MISMATCH);
+        assert!(signer::address_of(account) == @lendoor, EADMIN_MISMATCH);
         move_to(account, OracleStore { admin, prices: simple_map::new() });
     }
 
-    fun assert_init() { assert!(exists<OracleStore>(@aries), ENOT_INIT) }
+    fun assert_init() { assert!(exists<OracleStore>(@lendoor), ENOT_INIT) }
 
     public fun is_admin(a: address): bool acquires OracleStore {
         assert_init();
-        borrow_global<OracleStore>(@aries).admin == a
+        borrow_global<OracleStore>(@lendoor).admin == a
     }
 
     /// Setea precio por TypeInfo (admin only).
     public fun set_price_t(admin: &signer, key: TypeInfo, price: Decimal) acquires OracleStore {
         assert!(is_admin(signer::address_of(admin)), EADMIN_MISMATCH);
-        let s = borrow_global_mut<OracleStore>(@aries);
+        let s = borrow_global_mut<OracleStore>(@lendoor);
         if (simple_map::contains_key(&s.prices, &key)) {
             *simple_map::borrow_mut(&mut s.prices, &key) = price;
         } else {
@@ -46,10 +46,10 @@ module oracle::oracle {
     /// Versión interna para otros módulos ON-CHAIN: acepta TypeInfo.
     /// (No es #[view], así evitamos el error de “TypeInfo no soportado como parámetro de transacción”.)
     public fun get_price_ti(key: TypeInfo): Decimal acquires OracleStore {
-        if (!exists<OracleStore>(@aries)) {
+        if (!exists<OracleStore>(@lendoor)) {
             dec::one()
         } else {
-            let s = borrow_global<OracleStore>(@aries);
+            let s = borrow_global<OracleStore>(@lendoor);
             if (simple_map::contains_key(&s.prices, &key)) {
                 *simple_map::borrow(&s.prices, &key)
             } else {

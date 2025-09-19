@@ -1,4 +1,4 @@
-module aries::emode_category {
+module lendoor::emode_category {
     use std::signer;
     use std::option::{Self, Option};
     use std::string::{String, Self};
@@ -7,18 +7,9 @@ module aries::emode_category {
     use aptos_std::smart_table::{Self, SmartTable};
     use aptos_std::table_with_length::{Self, TableWithLength};
 
-    friend aries::controller;
-    friend aries::reserve;
-    friend aries::profile;
-
-    #[test_only]
-    friend aries::profile_tests;
-    #[test_only]
-    friend aries::controller_test;
-    #[test_only]
-    friend aries::test_utils;
-    #[test_only]
-    friend aries::emode_category_tests;
+    friend lendoor::controller;
+    friend lendoor::reserve;
+    friend lendoor::profile;
 
     /// --- Errors ---
     
@@ -64,7 +55,7 @@ module aries::emode_category {
     // --- Initiliaze ---
 
     public(friend) fun init(account: &signer, admin: address) {
-        assert!(signer::address_of(account) == @aries, EADMIN_MISMATCH);
+        assert!(signer::address_of(account) == @lendoor, EADMIN_MISMATCH);
         assert!(!exists<EModeCategories>(signer::address_of(account)), EEMODE_STORE_ALREADY_EXIST);
         move_to(
             account, 
@@ -93,7 +84,7 @@ module aries::emode_category {
         );
         assert!(string::length(&id) > 0, EINVALID_EMODE_ID);
 
-        let bundle = borrow_global_mut<EModeCategories>(@aries);
+        let bundle = borrow_global_mut<EModeCategories>(@lendoor);
         assert!(signer::address_of(account) == bundle.admin, EADMIN_MISMATCH);
 
         let oracle_key_type = if (type_info::type_of<OracleType>() == type_info::type_of<DummyOracleKey>()) {
@@ -125,7 +116,7 @@ module aries::emode_category {
     }
 
     public(friend) fun reserve_enter_emode<ReserveType>(account: &signer, emode_id: String) acquires EModeCategories {
-        let bundle = borrow_global_mut<EModeCategories>(@aries);
+        let bundle = borrow_global_mut<EModeCategories>(@lendoor);
         assert!(signer::address_of(account) == bundle.admin, EADMIN_MISMATCH);
 
         assert_emode_exist(&bundle.categories, &emode_id);
@@ -137,7 +128,7 @@ module aries::emode_category {
     }
 
     public(friend) fun reserve_exit_emode<ReserveType>(account: &signer) acquires EModeCategories {
-        let bundle = borrow_global_mut<EModeCategories>(@aries);
+        let bundle = borrow_global_mut<EModeCategories>(@lendoor);
         assert!(signer::address_of(account) == bundle.admin, EADMIN_MISMATCH);
 
         let reserve_type = type_info::type_of<ReserveType>();
@@ -148,7 +139,7 @@ module aries::emode_category {
     }
 
     public(friend) fun profile_enter_emode(profile_account: address, emode_id: String) acquires EModeCategories {
-        let bundle = borrow_global_mut<EModeCategories>(@aries);
+        let bundle = borrow_global_mut<EModeCategories>(@lendoor);
 
         assert_emode_exist(&bundle.categories, &emode_id);
 
@@ -157,7 +148,7 @@ module aries::emode_category {
     }
 
     public(friend) fun profile_exit_emode(profile_account: address) acquires EModeCategories {
-        let bundle = borrow_global_mut<EModeCategories>(@aries);
+        let bundle = borrow_global_mut<EModeCategories>(@lendoor);
         let exist_emode_id = smart_table::borrow(&bundle.profile_emodes, profile_account);
 
         assert_emode_exist(&bundle.categories, exist_emode_id);
@@ -165,7 +156,7 @@ module aries::emode_category {
     }
 
     public(friend) fun reserve_emode_t(reserve_type: TypeInfo): Option<String> acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
         if (table_with_length::contains(&bundle.reserve_emodes, reserve_type)) {
             option::some(*table_with_length::borrow(&bundle.reserve_emodes, reserve_type))
         } else {
@@ -174,7 +165,7 @@ module aries::emode_category {
     }
 
     public(friend) fun reserve_in_emode_t(emode_id: &String, reserve_type: TypeInfo): bool acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
         if (table_with_length::contains(&bundle.reserve_emodes, reserve_type)) {
             *table_with_length::borrow(&bundle.reserve_emodes, reserve_type) == *emode_id
         } else {
@@ -183,25 +174,25 @@ module aries::emode_category {
     }
 
     public(friend) fun emode_loan_to_value(emode_id: String): u8 acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
 
         simple_map::borrow(&bundle.categories, &emode_id).loan_to_value
     }
 
     public(friend) fun emode_liquidation_bonus_bips(emode_id: String): u64 acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
 
         simple_map::borrow(&bundle.categories, &emode_id).liquidation_bonus_bips
     }
 
     public(friend) fun emode_liquidation_threshold(emode_id: String): u8 acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
 
         simple_map::borrow(&bundle.categories, &emode_id).liquidation_threshold
     }
 
     public(friend) fun emode_oracle_key_type(emode_id: String): Option<TypeInfo> acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
 
         simple_map::borrow(&bundle.categories, &emode_id).oracle_key_type
     }
@@ -229,7 +220,7 @@ module aries::emode_category {
 
     #[view]
     public fun profile_emode(profile_account: address): Option<String> acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
         if (smart_table::contains(&bundle.profile_emodes, profile_account)) {
             option::some(*smart_table::borrow(&bundle.profile_emodes, profile_account))
         } else {
@@ -249,14 +240,14 @@ module aries::emode_category {
 
     #[view]
     public fun emode_config(emode_id: String): EMode acquires EModeCategories {
-        let bundle = borrow_global<EModeCategories>(@aries);
+        let bundle = borrow_global<EModeCategories>(@lendoor);
 
         *simple_map::borrow(&bundle.categories, &emode_id)
     }
 
     #[view]
     public fun emode_categoies_ids(): vector<String> acquires EModeCategories {
-        let registry = borrow_global<EModeCategories>(@aries);
+        let registry = borrow_global<EModeCategories>(@lendoor);
         simple_map::keys(&registry.categories)
     }
 }

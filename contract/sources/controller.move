@@ -1,4 +1,4 @@
-module aries::controller {
+module lendoor::controller {
     use std::signer;
     use std::option::{Self};
     use std::string::{Self, String};
@@ -13,15 +13,15 @@ module aries::controller {
 
     use oracle::oracle;
 
-    use aries::controller_config;
+    use lendoor::controller_config;
     use decimal::decimal;
-    use aries_config::interest_rate_config;
-    use aries::reserve::{Self, LP};
-    use aries_config::reserve_config;
-    use aries::profile;
-    use aries::utils;
-    use aries::emode_category;
-    use aries::fa_to_coin_wrapper;
+    use lendoor_config::interest_rate_config;
+    use lendoor::reserve::{Self, LP};
+    use lendoor_config::reserve_config;
+    use lendoor::profile;
+    use lendoor::utils;
+    use lendoor::emode_category;
+    use lendoor::fa_to_coin_wrapper;
 
     //
     // Errors.

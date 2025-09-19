@@ -4,8 +4,8 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-aries = "_"
-aries_config = "_"
+lendoor = "_"
+lendoor_config = "_"
 decimal = "_"
 util_types = "_"
 oracle = "_"

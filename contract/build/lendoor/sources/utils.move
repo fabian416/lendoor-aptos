@@ -1,5 +1,5 @@
 //! Some utility functions to reduce coding efforts
-module aries::utils {
+module lendoor::utils {
     use std::signer;
     use aptos_std::type_info;
 

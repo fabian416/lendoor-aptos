@@ -1,10 +1,8 @@
 //! Controller/Market-wide config storage & access handles
-module aries::controller_config {
+module lendoor::controller_config {
     use std::signer;
 
-    friend aries::controller;
-    #[test_only]
-    friend aries::test_utils;
+    friend lendoor::controller;
 
     /// `ControllerConfig` is not set.
     const ECONTROLLER_NO_CONFIG: u64 = 1;
@@ -20,7 +18,7 @@ module aries::controller_config {
     }
 
     public(friend) fun init_config(account: &signer, admin: address) {
-        assert!(signer::address_of(account) == @aries, ERESERVE_NOT_ARIES);
+        assert!(signer::address_of(account) == @lendoor, ERESERVE_NOT_ARIES);
         move_to(
           account, 
           ControllerConfig{
@@ -30,7 +28,7 @@ module aries::controller_config {
     }
 
     fun assert_config_present() {
-        assert!(exists<ControllerConfig>(@aries), ECONTROLLER_NO_CONFIG);
+        assert!(exists<ControllerConfig>(@lendoor), ECONTROLLER_NO_CONFIG);
     }
 
     #[test_only]
@@ -40,7 +38,7 @@ module aries::controller_config {
 
     public fun is_admin(addr: address): bool acquires ControllerConfig {
         assert_config_present();
-        let config = borrow_global<ControllerConfig>(@aries);
+        let config = borrow_global<ControllerConfig>(@lendoor);
         return config.admin == addr
     }
 

@@ -1,8 +1,4 @@
-module aries_config::reserve_config {
-    /// Marcadores de farming (solo tipos).
-    struct DepositFarming has copy, drop, store {}
-    struct BorrowFarming  has copy, drop, store {}
-
+module lendoor_config::reserve_config {
     struct ReserveConfig has copy, drop, store {
         loan_to_value: u8,
         liquidation_threshold: u8,

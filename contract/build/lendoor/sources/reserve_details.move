@@ -1,11 +1,11 @@
 //! A module that does various bookkeeping including interest accumulation, fee calculation and others.
 //! The actual `Coin` transfer should happen on the caller side.
-module aries::reserve_details {
+module lendoor::reserve_details {
     use std::timestamp;
 
-    use aries_config::reserve_config::{Self, ReserveConfig};
-    use aries_config::interest_rate_config::{Self, InterestRateConfig};
-    use aries::math_utils;
+    use lendoor_config::reserve_config::{Self, ReserveConfig};
+    use lendoor_config::interest_rate_config::{Self, InterestRateConfig};
+    use lendoor::math_utils;
 
     use decimal::decimal::{Self, Decimal};
 

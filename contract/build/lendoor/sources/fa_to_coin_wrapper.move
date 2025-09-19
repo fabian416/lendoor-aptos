@@ -1,4 +1,4 @@
-module aries::fa_to_coin_wrapper {
+module lendoor::fa_to_coin_wrapper {
     use std::signer;
     use std::string;
     use std::vector;
@@ -12,7 +12,7 @@ module aries::fa_to_coin_wrapper {
     use std::option::{Self};
     use aptos_framework::primary_fungible_store;
 
-    friend aries::controller;
+    friend lendoor::controller;
 
     /// Admin mismatch.
     const EADMIN_MISMATCH: u64 = 1;
@@ -49,7 +49,7 @@ module aries::fa_to_coin_wrapper {
 
     public(friend) fun init(account: &signer) {
         assert!(!exists<FASigner>(signer::address_of(account)), EWRAPPER_COIN_INFO_ALREADY_EXIST);
-        assert!(signer::address_of(account) == @aries, EADMIN_MISMATCH);
+        assert!(signer::address_of(account) == @lendoor, EADMIN_MISMATCH);
 
         let (fa_signer, cap) = account::create_resource_account(
             account, b"FASigner");
@@ -61,11 +61,11 @@ module aries::fa_to_coin_wrapper {
 
     public(friend) fun add_fa<WCoin>(account: &signer, metadata: Object<Metadata>) acquires FASigner {
         assert!(exists<FASigner>(signer::address_of(account)), EFA_SIGNER_DOES_NOT_EXIST);
-        assert!(signer::address_of(account) == @aries, EADMIN_MISMATCH);
+        assert!(signer::address_of(account) == @lendoor, EADMIN_MISMATCH);
         assert!(!exists<WrapperCoinInfo<WCoin>>(signer::address_of(account)), EWRAPPER_COIN_INFO_ALREADY_EXIST);
         // Wrapping is only needed when the FA doesn't have a corresponding `Coin`.
         assert!(option::is_none(&coin::paired_coin(metadata)), EWRAPPER_COIN_INFO_ALREADY_EXIST);
-        let wrapper = borrow_global_mut<FASigner>(@aries);
+        let wrapper = borrow_global_mut<FASigner>(@lendoor);
         let (symbol, name) = make_symbol_and_name_for_wrapped_coin(metadata);
 
         let (burn_capability, freeze_capability, mint_capability) = coin::initialize<WCoin>(
@@ -91,11 +91,11 @@ module aries::fa_to_coin_wrapper {
     }
 
     public fun fa_to_coin<WCoin>(account: &signer, amount: u64): Coin<WCoin> acquires WrapperCoinInfo, FASigner {
-        assert!(exists<FASigner>(@aries), EFA_SIGNER_DOES_NOT_EXIST);
-        assert!(exists<WrapperCoinInfo<WCoin>>(@aries), EWRAPPER_COIN_INFO_DOES_NOT_EXIST);
+        assert!(exists<FASigner>(@lendoor), EFA_SIGNER_DOES_NOT_EXIST);
+        assert!(exists<WrapperCoinInfo<WCoin>>(@lendoor), EWRAPPER_COIN_INFO_DOES_NOT_EXIST);
 
-        let fa_signer = borrow_global_mut<FASigner>(@aries);
-        let wrapper = borrow_global_mut<WrapperCoinInfo<WCoin>>(@aries);
+        let fa_signer = borrow_global_mut<FASigner>(@lendoor);
+        let wrapper = borrow_global_mut<WrapperCoinInfo<WCoin>>(@lendoor);
 
         let coin_supply = coin::supply<WCoin>();
         if (option::is_some(&coin_supply)) {
@@ -107,11 +107,11 @@ module aries::fa_to_coin_wrapper {
     }
 
     public fun coin_to_fa<WCoin>(wrapped_coin: Coin<WCoin>, account: &signer) acquires WrapperCoinInfo, FASigner {
-        assert!(exists<FASigner>(@aries), EFA_SIGNER_DOES_NOT_EXIST);
-        assert!(exists<WrapperCoinInfo<WCoin>>(@aries), EWRAPPER_COIN_INFO_DOES_NOT_EXIST);
+        assert!(exists<FASigner>(@lendoor), EFA_SIGNER_DOES_NOT_EXIST);
+        assert!(exists<WrapperCoinInfo<WCoin>>(@lendoor), EWRAPPER_COIN_INFO_DOES_NOT_EXIST);
         
-        let fa_signer = borrow_global_mut<FASigner>(@aries);
-        let wrapper = borrow_global_mut<WrapperCoinInfo<WCoin>>(@aries);
+        let fa_signer = borrow_global_mut<FASigner>(@lendoor);
+        let wrapper = borrow_global_mut<WrapperCoinInfo<WCoin>>(@lendoor);
         let coin_supply = coin::supply<WCoin>();
         let amount = coin::value<WCoin>(&wrapped_coin);
         if (option::is_some(&coin_supply)) {
@@ -124,13 +124,13 @@ module aries::fa_to_coin_wrapper {
 
     #[view]
     public fun is_fa_wrapped_coin<WCoin>(): bool {
-        exists<WrapperCoinInfo<WCoin>>(@aries)
+        exists<WrapperCoinInfo<WCoin>>(@lendoor)
     }
 
     #[view]
     public fun wrapped_amount<WCoin>(): u64 acquires WrapperCoinInfo {
-        assert!(exists<WrapperCoinInfo<WCoin>>(@aries), EWRAPPER_COIN_INFO_DOES_NOT_EXIST);
-        borrow_global<WrapperCoinInfo<WCoin>>(@aries).fa_amount
+        assert!(exists<WrapperCoinInfo<WCoin>>(@lendoor), EWRAPPER_COIN_INFO_DOES_NOT_EXIST);
+        borrow_global<WrapperCoinInfo<WCoin>>(@lendoor).fa_amount
     }
 
     /// Creates the symbol and name for the wrapped coin from FA.

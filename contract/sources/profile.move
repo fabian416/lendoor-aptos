@@ -1,4 +1,4 @@
-module aries::profile {
+module lendoor::profile {
     use std::option::{Self, Option};
     use std::string::{Self};
     use std::signer;
@@ -11,16 +11,13 @@ module aries::profile {
 
     use aptos_framework::account;
     
-    use aries::reserve::{Self};
+    use lendoor::reserve::{Self};
     use decimal::decimal::{Self, Decimal};
     use util_types::iterable_table::{Self as iterable_table, IterableTable};
     use oracle::oracle;
-    use aries::emode_category::{Self as emode_category};
+    use lendoor::emode_category::{Self as emode_category};
 
-    friend aries::controller;
-    #[test_only]
-    friend aries::profile_tests;
-
+    friend lendoor::controller;
     //
     // Errors.
     //

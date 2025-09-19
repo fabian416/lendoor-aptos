@@ -42,8 +42,8 @@ async function publish() {
       addressName: "launchpad_addr",
       namedAddresses: {
         // Publish module to account address
-      aries: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
-      aries_config: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
+      lendoor: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
+      lendoor_config: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
       
       // si vendorizas terceros bajo tu mismo address, puedes apuntar a tu publisher;
       // si NO los tienes en tu repo, ver paso 3 (dependencias).

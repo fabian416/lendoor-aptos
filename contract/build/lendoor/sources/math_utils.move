@@ -1,5 +1,5 @@
 //! This modules contains some frequently used math calculation functions for the 
-module aries::math_utils {
+module lendoor::math_utils {
     use decimal::decimal::{Self, Decimal};
 
     /// Max `u64` value.

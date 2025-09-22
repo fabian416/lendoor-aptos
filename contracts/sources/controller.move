@@ -258,9 +258,10 @@ module lendoor::controller {
         account: &signer,
         default_profile_name: vector<u8>
     ) {
+        // Un solo perfil por usuario:
         profile::init(account);
-        profile::new(account, string::utf8(default_profile_name));
 
+        // Podés mantener el evento para telemetría (el nombre ya no se usa on-chain)
         event::emit(RegisterUserEvent {
             user_addr: signer::address_of(account),
             default_profile_name: string::utf8(default_profile_name),

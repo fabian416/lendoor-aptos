@@ -10,9 +10,6 @@ module lendoor::controller {
     use aptos_framework::fungible_asset::{Metadata};
     use aptos_framework::object::{Object};
 
-
-    use oracle::oracle;
-
     use lendoor::controller_config;
     use decimal::decimal;
     use lendoor_config::interest_rate_config;
@@ -191,7 +188,6 @@ module lendoor::controller {
     public entry fun init(account: &signer, admin_addr: address) {
         controller_config::init_config(account, admin_addr);
         reserve::init(account);
-        oracle::init(account, admin_addr);
         emode_category::init(account, admin_addr);
     }
 

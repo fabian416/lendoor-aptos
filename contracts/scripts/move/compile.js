@@ -28,7 +28,7 @@ async function compile() {
   const move = new cli.Move();
 
   await move.compile({
-    packageDirectoryPath: "contract",
+    packageDirectoryPath: "contracts",
     namedAddresses: {
         // Publish module to account address
       lendoor: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,

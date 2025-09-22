@@ -14,7 +14,6 @@ module lendoor::profile {
     use lendoor::reserve::{Self};
     use decimal::decimal::{Self, Decimal};
     use util_types::iterable_table::{Self as iterable_table, IterableTable};
-    use oracle::oracle;
     use lendoor::emode_category::{Self as emode_category};
 
     friend lendoor::controller;
@@ -260,7 +259,6 @@ module lendoor::profile {
             let ltv_pct: u8 = asset_ltv(profile_emode_id, &type_info);
             let ltv = decimal::from_percentage((ltv_pct as u128));
 
-            let price: Decimal = asset_price(profile_emode_id, &type_info);
             let actual_amount = reserve::get_underlying_amount_from_lp_amount(
                 type_info,
                 val.collateral_amount
@@ -300,10 +298,9 @@ module lendoor::profile {
             let liquidation_thereshold = decimal::from_percentage((liquidation_thereshold_pct as u128));
 
             let price: Decimal = asset_price(profile_emode_id, &type_info);
-            let actual_amount = reserve::get_underlying_amount_from_lp_amount(
                 type_info,
                 val.collateral_amount
-            );
+            ;
             let total_value = decimal::mul(
                 decimal::from_u64(actual_amount),
                 price
@@ -344,7 +341,6 @@ module lendoor::profile {
 
             let price: Decimal = asset_price(profile_emode_id, &type_info);
             let borrowed_amount = reserve::get_borrow_amount_from_share_dec(type_info, val.borrowed_share);
-            let borrow_value = decimal::mul(borrowed_amount, price);
             let borrow_factor_pct = asset_borrow_factor(profile_emode_id, &type_info);
             let risked_ajusted_borrow_value = decimal::div(
                 borrow_value, 
@@ -1016,17 +1012,6 @@ module lendoor::profile {
         }
     }
 
-    public(friend) fun asset_price(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): Decimal {
-        let reserve_emode = emode_category::reserve_emode_t(*reserve_type);
-        let oracle_type = *reserve_type;
-        if (emode_is_matching(profile_emode_id, &reserve_emode)) {
-            let emode_oracle = emode_category::emode_oracle_key_type(option::extract(&mut reserve_emode));
-            if (option::is_some(&emode_oracle)) {
-                oracle_type = option::extract(&mut emode_oracle);
-            }
-        };
-        oracle::get_price_ti(oracle_type)
-    }
 
     public(friend) fun can_borrow_asset(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): bool {
         let reserve_emode = emode_category::reserve_emode_t(*reserve_type);

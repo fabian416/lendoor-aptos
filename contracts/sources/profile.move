@@ -834,16 +834,11 @@ module lendoor::profile {
         }
     }
 
-    public(friend) fun asset_price(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): Decimal {
-        let reserve_emode = emode_category::reserve_emode_t(*reserve_type);
-        let oracle_type = *reserve_type;
-        if (emode_is_matching(profile_emode_id, &reserve_emode)) {
-            let emode_oracle = emode_category::emode_oracle_key_type(option::extract(&mut reserve_emode));
-            if (option::is_some(&emode_oracle)) {
-                oracle_type = option::extract(&mut emode_oracle);
-            }
-        };
-        oracle::get_price_ti(oracle_type)
+    public(friend) fun asset_price(
+        _profile_emode_id: &Option<string::String>,
+        _reserve_type: &TypeInfo
+    ): Decimal {
+        decimal::one()
     }
 
     public(friend) fun can_borrow_asset(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): bool {

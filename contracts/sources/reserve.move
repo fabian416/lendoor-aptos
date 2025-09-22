@@ -1,0 +1,647 @@
+//! Module which handles deposit, withdraw, borrow and repay.
+//! Mostly ported from CToken from Compound.
+module lendoor::reserve {
+    use std::string::{Self};
+    use std::option::{Self};
+    use std::vector;
+    use std::signer;
+
+    use aptos_std::type_info::{type_of as std_type, TypeInfo};
+    use aptos_std::table::{Self, Table};
+    use aptos_std::math64;
+    
+    use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
+
+    use decimal::decimal::{Self, Decimal};
+
+    use lendoor::controller_config;
+    use lendoor_config::interest_rate_config::{InterestRateConfig};
+    use lendoor::reserve_details::{Self, ReserveDetails};
+    use lendoor_config::reserve_config::{Self, ReserveConfig};
+    use lendoor::math_utils;
+    use lendoor::utils;
+
+    friend lendoor::controller;
+    friend lendoor::profile;
+    
+    //
+    // Errors.
+    //
+
+    /// When there is no collateral that can be remove from this user.
+    const ERESERVE_DETAILS_CORRUPTED: u64 = 0;
+
+    /// When `Reserves` struct is not exist.
+    const ERESERVE_NOT_EXIST: u64 = 1;
+
+    /// When `Reserves` struct already exist.
+    const ERESERVE_ALREADY_EXIST: u64 = 2;
+
+    /// When the deposit limit exceeds.
+    const ERESERVE_DEPOSIT_LIMIT_EXCEED: u64 = 3;
+
+    /// When the borrow limit exceeds.
+    const ERESERVE_BORROW_LIMIT_EXCEED: u64 = 4;
+
+    /// When this asset is not accepted as collateral.
+    const ERESERVE_NOT_ALLOW_AS_COLLATERAL: u64 = 5;
+
+    /// Timestamp should only increase.
+    const ERESERVE_TIME_SHOULD_INCREASE: u64 = 6;
+
+    /// When this particular reserve is not exist.
+    const ERESERVE_RESERVE_NOT_EXIST: u64 = 7;
+
+    /// When the account is not Aries Markets Account.
+    const ERESERVE_NOT_ARIES: u64 = 8;
+
+    /// When a reserve has no matched liquidity farming entry.
+    const ERESERVE_FARM_NOT_FOUND: u64 = 9;
+
+    /// When a reserve has no matched liquidity farming entry.
+    const ERESERVE_NO_ALLOW_COLLATERAL: u64 = 10;
+
+    /// Represents an LP coin.
+    struct LP<phantom Coin> has store { }
+
+    /// Global singelton to store reserve related statistics.
+    /// We don't store those statistics in `ReserveCoinContainer` to enable access by `TypeInfo`. 
+    struct Reserves has key {
+        stats: Table<TypeInfo, ReserveDetails>,
+    }
+
+    /// The struct to hold all the underlying `Coin`s.
+    /// Stored as a resources.
+    struct ReserveCoinContainer<phantom Coin0> has key {
+        /// Stores the available `Coin`.
+        underlying_coin: Coin<Coin0>,
+        /// Stores the LP `Coin` that act as collateral.
+        collateralised_lp_coin: Coin<LP<Coin0>>,
+        /// Mint capability for LP Coin.
+        mint_capability: MintCapability<LP<Coin0>>,
+        /// Burn capability for LP Coin.
+        burn_capability: BurnCapability<LP<Coin0>>,
+        /// Freeze capability for LP Coin.
+        freeze_capability: FreezeCapability<LP<Coin0>>,
+        /// Holds the borrow fee from the protocol.
+        fee: Coin<Coin0>,
+    }
+
+    /// A helper struct to temporarily hold the fee to be distributed
+    struct FeeDisbursement<phantom Coin0>{
+        coin: Coin<Coin0>,
+        receiver: address
+    }
+
+    #[event]
+    struct MintLPEvent<phantom CoinType> has drop, store {
+        amount: u64,
+        lp_amount: u64,
+    }
+
+    #[event]
+    struct RedeemLPEvent<phantom CoinType> has drop, store{
+        // redeemed underlying amount without fee
+        amount: u64,
+        // underlying fee amount
+        fee_amount: u64,
+        lp_amount: u64,
+    }
+
+    #[event]
+    struct DistributeBorrowFeeEvent<phantom CoinType> has drop, store {
+        // amount that user borrowed without any fee
+        actual_borrow_amount: u64,
+        platform_fee_amount: u64,
+    }
+
+    #[event]
+    struct SyncReserveDetailEvent<phantom CoinType> has drop, store {
+        total_lp_supply: u128,
+        total_cash_available: u128,
+        initial_exchange_rate_decimal: u128,
+        reserve_amount_decimal: u128,
+        total_borrowed_share_decimal: u128,
+        total_borrowed_decimal: u128,
+        interest_accrue_timestamp: u64,
+    }
+
+    #[event]
+    struct SyncReserveFarmEvent has drop, store {
+        reserve_type: TypeInfo,
+        farm_type: TypeInfo,
+    }
+
+    public(friend) fun init(account: &signer) {
+        assert!(signer::address_of(account) == @lendoor, ERESERVE_NOT_ARIES);
+        assert!(!exists<Reserves>(signer::address_of(account)), ERESERVE_ALREADY_EXIST);
+        move_to(
+            account, 
+            Reserves {
+                stats: table::new(),
+            }
+        );
+    }
+
+    #[view]
+    public fun reserve_state<CoinType>(): ReserveDetails acquires Reserves {
+        reserve_details(std_type<CoinType>())
+    }
+
+    #[test_only]
+    public fun has_initiated(): bool {
+        exists<Reserves>(@lendoor)
+    }
+
+    public(friend) fun create<Coin0>(
+        account: &signer,
+        initial_exchange_rate: Decimal,
+        reserve_config: ReserveConfig,
+        interest_rate_config: InterestRateConfig
+    ) acquires Reserves {
+        controller_config::assert_is_admin(signer::address_of(account));
+        
+        let (symbol, name) = make_symbol_and_name_for_lp_token<Coin0>();
+
+        let (burn_capability, freeze_capability, mint_capability) = coin::initialize<LP<Coin0>>(
+            account,
+            name,
+            symbol,
+            coin::decimals<Coin0>(),
+            true
+        );
+
+        move_to(account, ReserveCoinContainer<Coin0> {
+            underlying_coin: coin::zero<Coin0>(),
+            collateralised_lp_coin: coin::zero<LP<Coin0>>(),
+            fee: coin::zero<Coin0>(),
+            mint_capability,
+            burn_capability,
+            freeze_capability,
+        });
+
+        update_reserve_details(
+            type_info<Coin0>(),
+            reserve_details::new_fresh(
+                initial_exchange_rate,
+                reserve_config,
+                interest_rate_config
+            )
+        );
+    }
+
+    // Make a copy of the `ReserveDetails`. It is fine that this function is public, since you can only read.
+    public fun reserve_details(reserve_type_info: TypeInfo): ReserveDetails acquires Reserves {
+        assert_reserves_exists();
+        let reserves = borrow_global<Reserves>(@lendoor);
+        assert!(table::contains(&reserves.stats, reserve_type_info), ERESERVE_RESERVE_NOT_EXIST);
+        let reserve_stats = table::borrow<TypeInfo, ReserveDetails>(
+            &reserves.stats,
+            reserve_type_info,
+        );
+        *reserve_stats
+    }
+
+    fun update_reserve_details(
+        reserve_type_info: TypeInfo,
+        reserve_details: ReserveDetails
+    ) acquires Reserves {
+        assert_reserves_exists();
+        let reserves = borrow_global_mut<Reserves>(@lendoor);
+        if (table::contains<TypeInfo, ReserveDetails>(&reserves.stats, reserve_type_info)) {
+            let val = table::borrow_mut<TypeInfo, ReserveDetails>(
+                &mut reserves.stats,
+                reserve_type_info,
+            );
+            *val = reserve_details;
+        } else {
+            table::add<TypeInfo, ReserveDetails>(
+                &mut reserves.stats,
+                reserve_type_info,
+                reserve_details
+            )
+        }
+    }
+
+    // This is a helper method to set `ReserveDetails` to any arbitrary state to enable testing for interest accumulation.
+    #[test_only]
+    public fun update_reserve_details_for_testing<Coin0>(reserve_details: ReserveDetails) acquires Reserves {
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+    }
+
+    public(friend) fun update_reserve_config<Coin0>(reserve_config: ReserveConfig) acquires Reserves {
+        let new_reserve_details = reserve_details(type_info<Coin0>());
+        reserve_details::update_reserve_config(&mut new_reserve_details, reserve_config);
+        update_reserve_details(type_info<Coin0>(), new_reserve_details);
+    }
+
+    public(friend) fun update_interest_rate_config<Coin0>(interest_rate_config: InterestRateConfig) acquires Reserves {
+        let reserve_details = reserve_details(type_info<Coin0>());
+        reserve_details::update_interest_rate_config(&mut reserve_details, interest_rate_config);
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+    }
+
+    /// The key that is stored in the map.
+    public fun type_info<Coin0>(): TypeInfo {
+        std_type<Coin0>()
+    }
+
+    #[test_only]
+    public fun update_reserve_stats_with_mock_borrow<Coin0>(
+        details: ReserveDetails,
+        borrow_amount: u64, 
+        borrow_share_amount: Decimal
+    ) acquires Reserves {
+        let new_total_borrowed = decimal::add(
+            reserve_details::total_borrow_amount(&mut details), 
+            decimal::from_u64(borrow_amount)
+        );
+        let new_total_borrowed_share = decimal::add(
+            reserve_details::total_borrowed_share(&mut details), 
+            borrow_share_amount
+        );
+
+        reserve_details::set_total_borrow_amount(&mut details, new_total_borrowed);
+        reserve_details::set_total_borrow_share(&mut details, new_total_borrowed_share);
+
+        update_reserve_details(type_info<Coin0>(), details);
+    }
+
+    #[test_only]
+    public fun update_reserve_stats_with_mock_reserve_amount<Coin0>(
+        details: ReserveDetails, 
+        reserve_amount: Decimal,
+    ) acquires Reserves {
+        reserve_details::set_reserve_amount(&mut details, reserve_amount);
+        update_reserve_details(type_info<Coin0>(), details);
+    }
+
+    #[test_only]
+    public fun total_borrow_amount(reserve_type_info: TypeInfo): Decimal acquires Reserves {
+        reserve_details::total_borrow_amount(&mut reserve_details(reserve_type_info))
+    }
+
+    #[test_only]
+    public fun total_borrow_share(reserve_type_info: TypeInfo): Decimal acquires Reserves {
+        reserve_details::total_borrowed_share(&reserve_details(reserve_type_info))
+    }
+
+    #[test_only]
+    public fun total_cash_available(reserve_type_info: TypeInfo): u128 acquires Reserves {
+        reserve_details::total_cash_available(&reserve_details(reserve_type_info))
+    }
+
+    #[test_only]
+    public fun reserve_amount(reserve_type_info: TypeInfo): Decimal acquires Reserves {
+        reserve_details::reserve_amount(&mut reserve_details(reserve_type_info))
+    }
+
+    #[test_only]
+    public fun reserve_interest_config(reserve_type_info: TypeInfo): InterestRateConfig acquires Reserves {
+        reserve_details::interest_rate_config(&reserve_details(reserve_type_info))
+    }
+
+    public fun reserve_config(reserve_type_info: TypeInfo): ReserveConfig acquires Reserves {
+        reserve_details::reserve_config(&reserve_details(reserve_type_info))
+    }
+
+    public fun loan_to_value(reserve_type_info: TypeInfo): u8 acquires Reserves {
+        reserve_config::loan_to_value(&reserve_config(reserve_type_info))
+    }
+
+    public fun liquidation_threshold(reserve_type_info: TypeInfo): u8 acquires Reserves {
+        reserve_config::liquidation_threshold(&reserve_config(reserve_type_info))
+    }
+
+    public fun liquidation_bonus_bips(reserve_type_info: TypeInfo): u64 acquires Reserves {
+        reserve_config::liquidation_bonus_bips(&reserve_config(reserve_type_info))
+    }
+
+    public(friend) fun borrow_factor(reserve_type: TypeInfo): u8 acquires Reserves {
+        reserve_config::borrow_factor(&reserve_config(reserve_type))
+    }
+
+    public fun get_underlying_amount_from_lp_amount(
+        reserve_type_info: TypeInfo,
+        lp_amount: u64
+    ): u64 acquires Reserves {
+        let reserve_details = reserve_details(reserve_type_info);
+        reserve_details::get_underlying_amount_from_lp_amount(&mut reserve_details, lp_amount)
+    }
+
+    public fun get_lp_amount_from_underlying_amount(
+        reserve_type_info: TypeInfo,
+        underlying_amount: u64
+    ): u64 acquires Reserves {
+        let reserve_details = reserve_details(reserve_type_info);
+        reserve_details::get_lp_amount_from_underlying_amount(&mut reserve_details, underlying_amount)
+    }
+
+    public fun get_borrow_amount_from_share(
+        reserve_type_info: TypeInfo,
+        share_amount: u64
+    ): Decimal acquires Reserves {
+        get_borrow_amount_from_share_dec(reserve_type_info, decimal::from_u64(share_amount))
+    }
+
+    public fun get_borrow_amount_from_share_dec(
+        reserve_type_info: TypeInfo,
+        share_amount: Decimal
+    ): Decimal acquires Reserves {
+        let reserve_details = reserve_details(reserve_type_info);
+        reserve_details::get_borrow_amount_from_share_amount(&mut reserve_details, share_amount)
+    }
+
+    public fun get_share_amount_from_borrow_amount(
+        reserve_type_info: TypeInfo,
+        borrow_amount: u64
+    ): Decimal acquires Reserves {
+        get_share_amount_from_borrow_amount_dec(reserve_type_info, decimal::from_u64(borrow_amount))
+    }
+
+    public fun get_share_amount_from_borrow_amount_dec(
+        reserve_type_info: TypeInfo,
+        borrow_amount: Decimal
+    ): Decimal acquires Reserves {
+        let reserve_details = reserve_details(reserve_type_info);
+        reserve_details::get_share_amount_from_borrow_amount(&mut reserve_details, borrow_amount)
+    }
+
+    public fun mint<Coin0> (
+        underlying_coin: Coin<Coin0>
+    ): Coin<LP<Coin0>> acquires Reserves, ReserveCoinContainer {
+        let reserve_details = reserve_details(type_info<Coin0>());
+
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        check_stats_integrity<Coin0>(reserve_coins, &reserve_details);
+
+        let amount = coin::value(&underlying_coin);
+        let lp_amount = reserve_details::mint(&mut reserve_details, amount);
+
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+
+        // Perform the deposit
+        coin::merge(&mut reserve_coins.underlying_coin, underlying_coin);
+
+        // Return minted LP tokens
+        let lp_coins = coin::mint<LP<Coin0>>(lp_amount, &reserve_coins.mint_capability);
+
+        aptos_std::event::emit(MintLPEvent<Coin0> {
+            amount: amount,
+            lp_amount: lp_amount,
+        });
+        emit_sync_reserve_detail_event<Coin0>(&reserve_details);
+
+        lp_coins
+    }
+
+    fun check_stats_integrity<Coin0>(
+        reserve_coins: &ReserveCoinContainer<Coin0>,
+        details: &ReserveDetails
+    ) {
+        let total_cash_available = coin::value(&reserve_coins.underlying_coin);
+        let total_lp_supply = option::destroy_some(coin::supply<LP<Coin0>>());
+
+        assert!(
+            (total_cash_available as u128) == reserve_details::total_cash_available(details),
+            ERESERVE_DETAILS_CORRUPTED
+        );
+        assert!(
+            (total_lp_supply as u128) == reserve_details::total_lp_supply(details),
+            ERESERVE_DETAILS_CORRUPTED
+        );
+    }
+
+    public fun redeem<Coin0> (
+        lp_coin: Coin<LP<Coin0>>
+    ) : Coin<Coin0> acquires Reserves, ReserveCoinContainer {
+        let reserve_details = reserve_details(type_info<Coin0>());
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        check_stats_integrity<Coin0>(reserve_coins, &reserve_details);
+
+        let lp_amount = coin::value(&lp_coin);
+        let amount = reserve_details::redeem(
+            &mut reserve_details,
+            lp_amount,
+        );
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+
+        // Burn minted LP tokens
+        utils::burn_coin<LP<Coin0>>(lp_coin, &reserve_coins.burn_capability);
+
+        // Perform the withdraw, it will fail if there is not enough liquidity.
+        let total_withdrawal_coin = coin::extract<Coin0>(&mut reserve_coins.underlying_coin, amount);
+        let withdrawal_coin_after_fee = charge_withdrawal_fee(total_withdrawal_coin);
+
+        aptos_std::event::emit(RedeemLPEvent<Coin0> {
+            amount: coin::value(&withdrawal_coin_after_fee),
+            fee_amount: amount - coin::value(&withdrawal_coin_after_fee),
+            lp_amount: lp_amount,
+        });
+
+        emit_sync_reserve_detail_event<Coin0>(&reserve_details);
+
+        withdrawal_coin_after_fee
+    }
+
+    public(friend) fun add_collateral<Coin0>(
+        lp_coin: Coin<LP<Coin0>>
+    ) acquires Reserves, ReserveCoinContainer {
+        let reserve_type_info = type_info<Coin0>();
+        assert!(
+            reserve_details::allow_collateral(&reserve_details(reserve_type_info)), 
+            ERESERVE_NO_ALLOW_COLLATERAL
+        );
+
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        coin::merge<LP<Coin0>>(&mut coins_container.collateralised_lp_coin, lp_coin)
+    }
+
+    public(friend) fun remove_collateral<Coin0>(
+        amount: u64
+    ): Coin<LP<Coin0>> acquires ReserveCoinContainer {
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        coin::extract<LP<Coin0>>(&mut coins_container.collateralised_lp_coin, amount)
+    }
+
+    /// Can only be called by the `Controller`, this is borrow using collateral.
+    public(friend) fun borrow<Coin0>(
+        amount: u64,
+    ): Coin<Coin0> acquires Reserves, ReserveCoinContainer {
+        borrow_internal(amount)
+    }
+
+
+    public fun calculate_borrow_fee_using_borrow_type(
+        type_info: TypeInfo,
+        amount: u64,
+    ): u64 acquires Reserves {
+        let reserve_details = reserve_details(type_info);
+        calculate_fee_amount_from_borrow_type(&reserve_details, amount)
+    }
+
+    fun calculate_fee_amount_from_borrow_type(
+        reserve_details: &ReserveDetails,
+        amount: u64,
+    ): u64 {
+        reserve_details::calculate_borrow_fee(reserve_details, amount)
+    }
+
+    /// We unify the implementation between normal borrow that requires collateral with flash loan that
+    /// doesn't requires collateral. The only difference is on the fee that is charged.
+    fun borrow_internal<Coin0>(
+        amount: u64,
+    ): Coin<Coin0> acquires Reserves, ReserveCoinContainer {
+        let reserve_details = reserve_details(type_info<Coin0>());
+        let fee_amount = calculate_fee_amount_from_borrow_type(&reserve_details, amount);
+        let borrow_amount_with_fee = amount + fee_amount;
+        reserve_details::borrow(&mut reserve_details, borrow_amount_with_fee);
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+
+        let fee_coin = coin::extract<Coin0>(&mut coins_container.underlying_coin, fee_amount);
+        let loan_coins = coin::extract<Coin0>(&mut coins_container.underlying_coin, amount);
+
+        let platform_fee_amount = coin::value(&fee_coin);
+        coin::merge<Coin0>(&mut coins_container.fee, fee_coin);
+
+        aptos_std::event::emit(DistributeBorrowFeeEvent<Coin0> {
+            actual_borrow_amount: amount,
+            platform_fee_amount: platform_fee_amount,
+        });
+        emit_sync_reserve_detail_event<Coin0>(&reserve_details);
+        
+        loan_coins
+    }
+
+
+    /// Can only be called by the `Controller`, relevant book keeping for user should be done on the caller side.
+    /// If the `repaying_coin` is more than the user's debt, the additional part will be returned.
+    public(friend) fun repay<Coin0>(
+        repaying_coin: Coin<Coin0>
+    ): Coin<Coin0> acquires Reserves, ReserveCoinContainer {
+        let reserve_details = reserve_details(type_info<Coin0>());
+        let max_repay_amount = coin::value<Coin0>(&repaying_coin);
+        let (actual_repay_amount, _) = reserve_details::repay(&mut reserve_details, max_repay_amount);
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let remaining_coin = coin::extract<Coin0>(&mut repaying_coin, max_repay_amount - actual_repay_amount);
+        coin::merge<Coin0>(&mut coins_container.underlying_coin, repaying_coin);
+
+        emit_sync_reserve_detail_event<Coin0>(&reserve_details);
+
+        remaining_coin
+    }
+
+    public(friend) fun withdraw_borrow_fee<Coin0>(): Coin<Coin0> acquires ReserveCoinContainer {
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        coin::extract_all<Coin0>(&mut coins_container.fee)
+    }
+
+    public(friend) fun withdraw_reserve_fee<Coin0>(): Coin<Coin0> acquires ReserveCoinContainer, Reserves {
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let reserve_details = reserve_details(type_info<Coin0>());
+        let reserve_fee_amount = reserve_details::withdraw_reserve_amount(&mut reserve_details);
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+        coin::extract<Coin0>(&mut coins_container.underlying_coin, reserve_fee_amount)
+    }
+
+    public(friend) fun sync_cash_available<Coin0>() acquires ReserveCoinContainer, Reserves {
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let reserve_details = reserve_details(type_info<Coin0>());
+        let available_cash = coin::value(&mut coins_container.underlying_coin);
+        reserve_details::set_total_cash_available(&mut reserve_details, (available_cash as u128));
+        update_reserve_details(type_info<Coin0>(), reserve_details);
+    }
+
+    public fun calculate_repay(
+        reserve_type_info: TypeInfo,
+        borrowed_amount: u64,
+        borrowed_share: Decimal
+    ): (u64, Decimal) acquires Reserves {
+        let reserve_details = reserve_details(reserve_type_info);
+        reserve_details::calculate_repay(&mut reserve_details, borrowed_amount, borrowed_share)
+    }
+
+    /// Creates the symbol and name of an LP token.
+    public fun make_symbol_and_name_for_lp_token<Coin0>(): (string::String, string::String) {
+        let symbol0 = coin::symbol<Coin0>();
+        let symbol = vector::empty();
+        vector::append(&mut symbol, b"A");
+        vector::append(&mut symbol, *string::bytes(&symbol0));
+        let symbol_str = string::utf8(symbol);
+
+        let name0 = coin::name<Coin0>();
+        let name = b"Aries ";
+        vector::append(&mut name, *string::bytes(&name0));
+        vector::append(&mut name, b" LP Token");
+        let name_str = string::utf8(name);
+
+        (
+            // Token symbol should be shorter than 10 chars
+            string::sub_string(&symbol_str, 0, math64::min(string::length(&symbol_str), 10)), 
+            // Token name should be shorter than 32 chars
+            string::sub_string(&name_str, 0, math64::min(string::length(&name_str), 32))
+        )
+    }
+
+
+    fun assert_reserves_exists() {
+        assert!(exists<Reserves>(@lendoor), ERESERVE_NOT_EXIST);
+    }
+
+    /// A portion of liquidation bonus will be reserved into the protocol treasury.
+    public fun charge_liquidation_fee<Coin0>(
+        withdrawal_lp_coin: Coin<LP<Coin0>>
+    ): Coin<LP<Coin0>> acquires Reserves, ReserveCoinContainer {
+        let reserve_type_info = type_info<Coin0>();
+        let liquidation_fee_millionth = reserve_config::liquidation_fee_hundredth_bips(&reserve_config(reserve_type_info));
+        let fee_lp_amount = math_utils::mul_millionth_u64(coin::value(&withdrawal_lp_coin), liquidation_fee_millionth);
+        let fee_lp_coins = coin::extract(&mut withdrawal_lp_coin, fee_lp_amount);
+        let fee_coins = redeem(fee_lp_coins);
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor); 
+        coin::merge(&mut reserve_coins.fee, fee_coins);
+
+        withdrawal_lp_coin
+    }
+
+    /// A portion of withdrawn asset will be reserved into the protocol treasury as fee.
+    public fun charge_withdrawal_fee<Coin0>(
+        withdrawal_coin: Coin<Coin0>
+    ): Coin<Coin0> acquires Reserves, ReserveCoinContainer {
+        let reserve_type_info = type_info<Coin0>();
+        let withdraw_fee_millionth = reserve_config::withdraw_fee_hundredth_bips(&reserve_config(reserve_type_info));
+        let fee_amount = math_utils::mul_millionth_u64(coin::value(&withdrawal_coin), withdraw_fee_millionth);
+        let fee_coins = coin::extract(&mut withdrawal_coin, fee_amount);
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        coin::merge(&mut reserve_coins.fee, fee_coins);
+
+        withdrawal_coin
+    }
+
+    fun emit_sync_reserve_detail_event<Coin0>(detail: &ReserveDetails) {
+        aptos_std::event::emit(SyncReserveDetailEvent<Coin0> {
+            total_lp_supply: reserve_details::total_lp_supply(detail),
+            total_cash_available: reserve_details::total_cash_available(detail),
+            initial_exchange_rate_decimal: decimal::raw(reserve_details::initial_exchange_rate(detail)),
+            reserve_amount_decimal: decimal::raw(reserve_details::reserve_amount_raw(detail)),
+            total_borrowed_share_decimal: decimal::raw(reserve_details::total_borrowed_share(detail)),
+            total_borrowed_decimal: decimal::raw(reserve_details::total_borrowed(detail)),
+            interest_accrue_timestamp: reserve_details::interest_accrue_timestamp(detail),
+        })
+    }
+
+    // Specifications
+
+    spec module {
+    }
+
+    spec fun spec_reserve_balance<Coin0>(): num {
+        let coin_store = global<ReserveCoinContainer<Coin0>>(@lendoor);
+        coin::value<Coin0>(coin_store.underlying_coin)
+    }
+
+
+}

@@ -272,21 +272,6 @@ module lendoor::controller {
             default_profile_name: string::utf8(default_profile_name),
         })
     }
-
-    /// Add a new `Profile` to a given user.
-    public entry fun add_subaccount(
-        account: &signer,
-        profile_name: vector<u8>,
-    ) {
-        let profile_name = string::utf8(profile_name);
-        profile::new(account, profile_name);
-
-        event::emit(AddSubaccountEvent {
-            user_addr: signer::address_of(account),
-            profile_name: profile_name,
-        })
-    }
-
     /// Mint yield bearing LP tokens for a given user. The minted LP tokens does not increase the borrowing power.
     /// Instead it will be return to user's wallet. If the users would like to increase their borrowing power,
     /// they should use the `deposit` entry function below.

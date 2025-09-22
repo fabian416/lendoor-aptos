@@ -46,12 +46,6 @@ module lendoor::controller {
     }
 
     #[event]
-    struct AddSubaccountEvent has drop, store {
-        user_addr: address,
-        profile_name: string::String,
-    }
-
-    #[event]
     struct MintLPShareEvent<phantom CoinType> has drop, store {
         user_addr: address,
         amount: u64,

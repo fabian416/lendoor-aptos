@@ -7,13 +7,10 @@ module lendoor::profile {
     use aptos_std::type_info::{Self, TypeInfo};
     use aptos_std::event::{Self};
     use aptos_std::string_utils;
-
-    use aptos_framework::account;
     
     use lendoor::reserve::{Self};
     use decimal::decimal::{Self, Decimal};
     use util_types::iterable_table::{Self as iterable_table, IterableTable};
-    use oracle::oracle;
     use lendoor::emode_category::{Self as emode_category};
 
     friend lendoor::controller;

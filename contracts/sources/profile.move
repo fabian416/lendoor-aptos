@@ -610,7 +610,7 @@ module lendoor::profile {
             repay_amount
         );
 
-        // eventos SIN profile_name
+        // events WITHOUT profile_name
         emit_deposit_event(user_addr, profile, withdraw_reserve_type_info);
         emit_borrow_event(user_addr, profile, repay_reserve_type_info);
 
@@ -866,7 +866,7 @@ module lendoor::profile {
     public(friend) fun can_borrow_asset(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): bool {
         let reserve_emode = emode_category::reserve_emode_t(*reserve_type);
         if (option::is_some(profile_emode_id)) {
-            // Solo borra activos del mismo e-mode.
+            // Only delete assets of the same e-mode.
             emode_is_matching(profile_emode_id, &reserve_emode)
         } else {
             true

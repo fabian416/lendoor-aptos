@@ -183,7 +183,7 @@ module lendoor::controller {
         controller_config::init_config(account, admin_addr);
         reserve::init(account);
         emode_category::init(account, admin_addr);
-        credit_manager::init(account); // << nuevo
+        credit_manager::init(account); // << new
     }
     public entry fun init_emode(account: &signer) {
         emode_category::init(account, signer::address_of(account));
@@ -258,10 +258,10 @@ module lendoor::controller {
         account: &signer,
         default_profile_name: vector<u8>
     ) {
-        // Un solo perfil por usuario:
+        // Only one profile per user:
         profile::init(account);
 
-        // Podés mantener el evento para telemetría (el nombre ya no se usa on-chain)
+        // You can keep the event for telemetry (the name is no longer used on-chain)
         event::emit(RegisterUserEvent {
             user_addr: signer::address_of(account),
             default_profile_name: string::utf8(default_profile_name),
@@ -313,10 +313,10 @@ module lendoor::controller {
     ) {
         let addr = signer::address_of(account);
 
-        // Book-keeping en Profile (perfil único)
+        // Book-keeping in Profile (unique profile)
         profile::add_collateral(addr, reserve::type_info<Coin0>(), amount);
 
-        // Mover los LP del usuario al reserve
+        // Move the user's LPs to the reserve
         let lp_coin = coin::withdraw<LP<Coin0>>(account, amount);
         reserve::add_collateral<Coin0>(lp_coin);
 

@@ -5,25 +5,25 @@ module lendoor::credit_manager {
     use aptos_std::simple_map::{Self as ref_map, SimpleMap};
     use lendoor::controller_config;
 
-    // Lo usa profile
+    // Used by profile
     friend lendoor::profile;
 
     const E_NOT_INITIALIZED: u64 = 1;
     const E_LIMIT_EXCEEDED: u64 = 2;
 
-    /// Libro por usuario (solo `store`; NO `drop` porque contiene IterableTable)
+    /// Book per user (only `store`; NO `drop` because it contains IterableTable)
     struct UserBook has store {
-        limits: IterableTable<TypeInfo, u64>, // límite por activo
-        usage:  IterableTable<TypeInfo, u64>, // usado por activo
+        limits: IterableTable<TypeInfo, u64>, // limit per asset
+        usage:  IterableTable<TypeInfo, u64>, // used by asset
         paused: bool,
     }
 
-    /// Recurso global @lendoor con user -> UserBook
+    /// Global resource @lendoor with user -> UserBook
     struct GlobalCredit has key {
         users: SimpleMap<address, UserBook>,
     }
 
-    /// Inicialización (cuenta admin = @lendoor)
+    /// Initialization (admin account = @lendoor)
     public entry fun init(account: &signer) {
         controller_config::assert_is_admin(signer::address_of(account));
         assert!(!exists<GlobalCredit>(@lendoor), 0);
@@ -32,7 +32,7 @@ module lendoor::credit_manager {
         });
     }
 
-    /// Helper: asegura que exista el UserBook y devuelve &mut
+    /// Helper: ensures that the UserBook exists and returns &mut
     fun ensure_user_book(g: &mut GlobalCredit, user: address): &mut UserBook {
         if (!ref_map::contains_key<address, UserBook>(&g.users, &user)) {
             let empty = UserBook {
@@ -45,7 +45,7 @@ module lendoor::credit_manager {
         ref_map::borrow_mut<address, UserBook>(&mut g.users, &user)
     }
 
-    /// Admin: setea (reemplaza) el límite por activo (genérica para evitar pasar TypeInfo)
+    /// Admin: sets (replaces) the limit per asset (generic to avoid passing TypeInfo)
     public entry fun admin_set_limit<AssetType>(
         admin: &signer,
         user: address,
@@ -60,7 +60,7 @@ module lendoor::credit_manager {
         *entry = limit;
     }
 
-    /// Admin: pausar / despausar usuario
+    /// Admin: pause / unpause user
     public entry fun admin_pause_user(
         admin: &signer,
         user: address,
@@ -73,9 +73,9 @@ module lendoor::credit_manager {
         book.paused = paused;
     }
 
-    /************ Hooks/APIs internas para profile (pueden recibir TypeInfo) ************/
+    /************ Internal Hooks/APIs for profile (can receive TypeInfo) ************/
 
-    /// ¿Puede pedir prestado `amount` de `asset`? (friend)
+    /// Can `amount` of `asset` be borrowed? (friend)
     public(friend) fun can_borrow(
         user: address,
         asset: TypeInfo,
@@ -99,7 +99,7 @@ module lendoor::credit_manager {
         used + amount <= limit
     }
 
-    /// Hook: se llama cuando el borrow se materializa (incrementa uso). (friend)
+    /// Hook: called when the borrow materializes (increments usage). (friend)
     public(friend) fun on_borrow(
         user: address,
         asset: TypeInfo,
@@ -118,7 +118,7 @@ module lendoor::credit_manager {
         *used_ref = *used_ref + amount;
     }
 
-    /// Hook: repago (reduce el “used”). (friend)
+    /// Hook: repayment (reduces "used"). (friend)
     public(friend) fun on_repay(
         user: address,
         asset: TypeInfo,
@@ -132,7 +132,7 @@ module lendoor::credit_manager {
         if (*used_ref > amount) { *used_ref = *used_ref - amount } else { *used_ref = 0 };
     }
 
-    /************************ Vistas públicas (genéricas) ************************/
+    /************************ Public (generic) views ************************/
 
     #[view]
     public fun get_limit<AssetType>(user: address): u64 acquires GlobalCredit {

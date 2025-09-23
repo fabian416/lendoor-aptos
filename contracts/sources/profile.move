@@ -449,7 +449,7 @@ module lendoor::profile {
         let profile_emode = emode_category::profile_emode(user_addr);
 
         // 1) calcular retiro + faltante
-        let (withdrawal_lp_amount, mut borrow_amount) = withdraw_profile(
+        let (withdrawal_lp_amount, borrow_amount_unchecked) = withdraw_profile(
             profile,
             &profile_emode,
             reserve_type_info,
@@ -457,26 +457,27 @@ module lendoor::profile {
             allow_borrow,
         );
 
-        // 2) si hay borrow, validar y “marcar” en el credit manager
-        if (allow_borrow && borrow_amount > 0) {
+        // 2) si hay borrow, validar y “marcar” en el credit manager; producir el borrow_amount final
+        let borrow_amount_final = if (allow_borrow && borrow_amount_unchecked > 0) {
             assert!(
-                credit_manager::can_borrow(user_addr, reserve_type_info, borrow_amount),
-                0 // E_CREDIT_LIMIT_EXCEEDED (define uno si querés)
+                credit_manager::can_borrow(user_addr, reserve_type_info, borrow_amount_unchecked),
+                ECREDIT_LIMIT_EXCEEDED
             );
-            credit_manager::on_borrow(user_addr, reserve_type_info, borrow_amount);
+            credit_manager::on_borrow(user_addr, reserve_type_info, borrow_amount_unchecked);
 
-            // ahora sí, registra el préstamo en el perfil (book-keeping de shares)
-            borrow_profile(profile, &profile_emode, reserve_type_info, borrow_amount);
+            // registra el préstamo en el perfil (book-keeping de shares)
+            borrow_profile(profile, &profile_emode, reserve_type_info, borrow_amount_unchecked);
 
-            // el faltante ya fue cubierto vía borrow
-            borrow_amount = 0;
+            // ya cubrimos el faltante vía borrow
+            0
+        } else {
+            borrow_amount_unchecked
         };
 
         emit_borrow_event(user_addr, profile, reserve_type_info);
-        (withdrawal_lp_amount, borrow_amount, CheckEquity { user_addr })
+        (withdrawal_lp_amount, borrow_amount_final, CheckEquity { user_addr })
     }
-
-
+    
     /// Returns the (withdraw amount in terms of LP tokens, borrow amount).
     /// In the case of u64::max, we do not borrow, just withdraw all.
     fun withdraw_profile(

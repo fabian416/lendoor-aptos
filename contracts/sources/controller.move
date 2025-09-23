@@ -466,7 +466,8 @@ module lendoor::controller {
         let addr = signer::address_of(account);
         let profile_name_str = string::utf8(profile_name);
         let (withdraw_amount, borrow_amount, check_equity) = profile::withdraw(
-            addr, &profile_name_str, reserve::type_info<Coin0>(), amount, allow_borrow);
+            addr, reserve::type_info<Coin0>(), amount, allow_borrow
+        );
         let withdraw_coin = withdraw_from_reserve(
             withdraw_amount,
             borrow_amount,
@@ -515,7 +516,6 @@ module lendoor::controller {
     ) {
         let (actual_repay_amount, withdraw_amount) = profile::liquidate(
             liquidatee_addr,
-            &string::utf8(liquidatee_profile_name),
             reserve::type_info<RepayCoin>(), 
             reserve::type_info<WithdrawCoin>(), 
             amount
@@ -705,7 +705,7 @@ module lendoor::controller {
     // --- EMode User Operations ---
     public entry fun enter_emode(account: &signer, profile_name: String, emode_id: String) {
         let user_addr = signer::address_of(account); 
-        profile::set_emode(user_addr, &profile_name, option::some(emode_id));
+        profile::set_emode(user_addr, option::some(emode_id));
         event::emit(ProfileEModeSet {
             user_addr: user_addr,
             profile_name: profile_name,
@@ -715,7 +715,7 @@ module lendoor::controller {
 
     public entry fun exit_emode(account: &signer, profile_name: String) {
         let user_addr = signer::address_of(account); 
-        profile::set_emode(user_addr, &profile_name, option::none());
+        profile::set_emode(user_addr, option::none());
         event::emit(ProfileEModeSet {
             user_addr: user_addr,
             profile_name: profile_name,

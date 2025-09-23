@@ -464,7 +464,6 @@ module lendoor::controller {
         allow_borrow: bool,
     ) {
         let addr = signer::address_of(account);
-        let profile_name_str = string::utf8(profile_name);
         let (withdraw_amount, borrow_amount, check_equity) = profile::withdraw(
             addr, reserve::type_info<Coin0>(), amount, allow_borrow
         );

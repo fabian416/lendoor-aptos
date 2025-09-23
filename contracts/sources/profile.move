@@ -284,7 +284,7 @@ module lendoor::profile {
     public fun get_deposited_amount(
         user_addr: address,
         reserve_type_info: TypeInfo
-    ): u64 acquires Profiles, Profile {
+    ): u64 acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
         if (!iterable_table::contains<TypeInfo, Deposit>(&profile.deposited_reserves, &reserve_type_info)) {
             0

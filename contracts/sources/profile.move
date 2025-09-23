@@ -7,7 +7,8 @@ module lendoor::profile {
     use aptos_std::type_info::{Self, TypeInfo};
     use aptos_std::event::{Self};
     use aptos_std::string_utils;
-    
+
+    use lendoor::credit_manager;
     use lendoor::reserve::{Self};
     use decimal::decimal::{Self, Decimal};
     use util_types::iterable_table::{Self as iterable_table, IterableTable};
@@ -17,6 +18,8 @@ module lendoor::profile {
     //
     // Errors.
     //
+
+    const ECREDIT_LIMIT_EXCEEDED: u64 = 42;
 
     /// When there is no collateral that can be remove from this user.
     const EPROFILE_NO_DEPOSIT_RESERVE: u64 = 0;
@@ -444,13 +447,31 @@ module lendoor::profile {
     ): (u64, u64, CheckEquity) acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
         let profile_emode = emode_category::profile_emode(user_addr);
-        let (withdrawal_lp_amount, borrow_amount) = withdraw_profile(
+
+        // 1) calcular retiro + faltante
+        let (withdrawal_lp_amount, mut borrow_amount) = withdraw_profile(
             profile,
             &profile_emode,
             reserve_type_info,
             amount,
             allow_borrow,
         );
+
+        // 2) si hay borrow, validar y “marcar” en el credit manager
+        if (allow_borrow && borrow_amount > 0) {
+            assert!(
+                credit_manager::can_borrow(user_addr, reserve_type_info, borrow_amount),
+                0 // E_CREDIT_LIMIT_EXCEEDED (define uno si querés)
+            );
+            credit_manager::on_borrow(user_addr, reserve_type_info, borrow_amount);
+
+            // ahora sí, registra el préstamo en el perfil (book-keeping de shares)
+            borrow_profile(profile, &profile_emode, reserve_type_info, borrow_amount);
+
+            // el faltante ya fue cubierto vía borrow
+            borrow_amount = 0;
+        };
+
         emit_borrow_event(user_addr, profile, reserve_type_info);
         (withdrawal_lp_amount, borrow_amount, CheckEquity { user_addr })
     }

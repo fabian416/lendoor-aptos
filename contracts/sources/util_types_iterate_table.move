@@ -11,7 +11,7 @@ module util_types::iterable_table {
         IterableTable { inner: sm::new<K, V>() }
     }
 
-    // KEY por referencia (consistencia con el resto)
+    // KEY by reference (consistency with the rest)
     public fun contains<K: copy + drop + store, V: store>(t: &IterableTable<K, V>, k: &K): bool {
         sm::contains_key(&t.inner, k)
     }
@@ -20,11 +20,11 @@ module util_types::iterable_table {
         sm::add(&mut t.inner, k, v)
     }
 
-    // remove de SimpleMap devuelve (K, V). Desestructuramos.
-    // Pedimos drop en V para liberar correctamente.
+    // remove from SimpleMap returns (K, V). We destructure.
+    // We ask for drop in V to release correctly.
     public fun remove<K: copy + drop + store, V: drop + store>(t: &mut IterableTable<K, V>, k: &K) {
         let (_removed_k, _removed_v) = sm::remove(&mut t.inner, k);
-        // _removed_v cae del stack (tiene drop)
+        // _removed_v falls off the stack (has drop)
     }
 
     public fun borrow<K: copy + drop + store, V: store>(t: &IterableTable<K, V>, k: &K): &V {
@@ -35,7 +35,7 @@ module util_types::iterable_table {
         sm::borrow_mut(&mut t.inner, k)
     }
 
-    // no pide drop: el default se mueve adentro si no existe
+    // does not ask for drop: the default moves inside if it does not exist
     public fun borrow_mut_with_default<K: copy + drop + store, V: drop + store>(
         t: &mut IterableTable<K, V>, k: &K, default: V
     ): &mut V
@@ -43,7 +43,7 @@ module util_types::iterable_table {
         if (sm::contains_key(&t.inner, k)) {
             sm::borrow_mut(&mut t.inner, k)
         } else {
-            let kk = *k; // necesitamos K por valor para add
+            let kk = *k; // we need K by value for add
             sm::add(&mut t.inner, kk, default);
             sm::borrow_mut(&mut t.inner, k)
         }
@@ -58,8 +58,8 @@ module util_types::iterable_table {
         if (vector::length(&ks) == 0) option::none<K>() else option::some(*vector::borrow(&ks, 0))
     }
 
-    /// Iterador “a mano” sobre SimpleMap: dado k, devuelve (&V, _, next_key)
-    /// El u64 intermedio es placeholder (0) para compatibilidad con otras firmas.
+    /// "Manual" iterator over SimpleMap: given k, returns (&V, _, next_key)
+    /// The intermediate u64 is a placeholder (0) for compatibility with other signatures.
     public fun borrow_iter<K: copy + drop + store, V: store>(
         t: &IterableTable<K, V>, k: &K
     ): (&V, u64, Option<K>) {
@@ -82,6 +82,6 @@ module util_types::iterable_table {
             if (*vector::borrow(ks, i) == *key) return i;
             i = i + 1;
         };
-        n // si no está, devolvemos n (para que no haya "next")
+        n // if it is not there, we return n (so that there is no "next")
     }
 }

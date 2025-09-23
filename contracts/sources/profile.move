@@ -266,10 +266,11 @@ module lendoor::profile {
         check_equity.user_addr
     }
 
-    /// Check to see if there is enough collateral after `borrow` and `remove_collateral`.
-    public fun check_enough_collateral(check_equity: CheckEquity) acquires Profile {
-        let CheckEquity { user_addr } = check_equity;
-        assert!(has_enough_collateral(user_addr), EPROFILE_NEGATIVE_EQUITY);
+    /// Now NO-op function, just to consume the `CheckEquity` resource.
+    public fun check_enough_collateral(check_equity: CheckEquity) {
+        // Consumimos el recurso para no filtrar nada y evitar 'drop' requerido
+        let CheckEquity { user_addr: _ } = check_equity;
+        // no-op
     }
 
     public fun has_enough_collateral(user_addr: address): bool acquires Profile {

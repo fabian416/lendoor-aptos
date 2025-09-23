@@ -268,7 +268,7 @@ module lendoor::profile {
 
     /// Now NO-op function, just to consume the `CheckEquity` resource.
     public fun check_enough_collateral(check_equity: CheckEquity) {
-        // Consumimos el recurso para no filtrar nada y evitar 'drop' requerido
+        // We consume the resource to avoid leaking anything and avoid 'drop' required
         let CheckEquity { user_addr: _ } = check_equity;
         // no-op
     }
@@ -276,9 +276,8 @@ module lendoor::profile {
     public fun has_enough_collateral(_user_addr: address): bool {
         true
     }
-
-
-    /// Versión interna usada por otras vistas. También siempre ok.
+    
+    /// Internal vrsion used by other views. Also always ok.
     public(friend) fun has_enough_collateral_for_profile(
         _profile: &Profile,
         _profile_emode_id: &Option<string::String>

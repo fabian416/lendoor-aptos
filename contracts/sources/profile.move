@@ -273,11 +273,10 @@ module lendoor::profile {
         // no-op
     }
 
-    public fun has_enough_collateral(user_addr: address): bool acquires Profile {
-        let profile = borrow_global_mut<Profile>(user_addr);
-        let profile_emode = emode_category::profile_emode(user_addr);
-        has_enough_collateral_for_profile(profile, &profile_emode)
+    public fun has_enough_collateral(_user_addr: address): bool {
+        true
     }
+
 
     public(friend) fun has_enough_collateral_for_profile(profile: &Profile, profile_emode_id: &Option<string::String>): bool {
         let adjusted_borrow_value = get_adjusted_borrowed_value_fresh_for_profile(profile, profile_emode_id);

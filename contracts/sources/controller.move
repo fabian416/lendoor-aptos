@@ -62,7 +62,6 @@ module lendoor::controller {
     #[event]
     struct AddLPShareEvent<phantom CoinType> has drop, store {
         user_addr: address,
-        profile_name: string::String,
         lp_amount: u64,
     }
 
@@ -309,21 +308,21 @@ module lendoor::controller {
     /// This function should rarely be used. Use `deposit` directly for simplicity.
     public entry fun add_collateral<Coin0>(
         account: &signer,
-        profile_name: vector<u8>,
         amount: u64,
     ) {
         let addr = signer::address_of(account);
-        profile::add_collateral(
-            addr, &string::utf8(profile_name), reserve::type_info<Coin0>(), amount);
 
+        // Book-keeping en Profile (perfil único)
+        profile::add_collateral(addr, reserve::type_info<Coin0>(), amount);
+
+        // Mover los LP del usuario al reserve
         let lp_coin = coin::withdraw<LP<Coin0>>(account, amount);
         reserve::add_collateral<Coin0>(lp_coin);
 
         event::emit(AddLPShareEvent<Coin0> {
-            user_addr: signer::address_of(account),
-            profile_name: string::utf8(profile_name),
+            user_addr: addr,
             lp_amount: amount,
-        })
+        });
     }
 
     /// Withdraw the yield bearing tokens to user's wallet.
@@ -335,7 +334,7 @@ module lendoor::controller {
     ) {
         let addr = signer::address_of(account);
         let check_equity = profile::remove_collateral(
-            addr, &string::utf8(profile_name), reserve::type_info<Coin0>(), amount);
+        addr, reserve::type_info<Coin0>(), amount);
         profile::check_enough_collateral(check_equity);
 
         let lp_coin = reserve::remove_collateral<Coin0>(amount);
@@ -378,9 +377,8 @@ module lendoor::controller {
         repay_only: bool,
     ) {
         let (repay_amount, deposit_amount) = profile::deposit(
-            receiver_addr, 
-            &string::utf8(profile_name),
-            reserve::type_info<Coin0>(), 
+            receiver_addr,
+            reserve::type_info<Coin0>(),
             amount,
             repay_only
         );
@@ -417,9 +415,11 @@ module lendoor::controller {
         // Because it would cause remaining coins to be reclaimed after repay. 
         // We cannot drop them and would not add a new address parameter to reclaim them. 
         let (repay_amount, deposit_amount) = profile::deposit(
-            addr, profile_name, reserve::type_info<Coin0>(), coin::value(&coin), false
+            addr,
+            reserve::type_info<Coin0>(),
+            coin::value(&coin),
+            false
         );
-
         let repay_coin = coin::extract(&mut coin, repay_amount);
         assert!(coin::value(&coin) == deposit_amount, 0);
         deposit_coin_to_reserve<Coin0>(repay_coin, coin);

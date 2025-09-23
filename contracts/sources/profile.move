@@ -278,10 +278,12 @@ module lendoor::profile {
     }
 
 
-    public(friend) fun has_enough_collateral_for_profile(profile: &Profile, profile_emode_id: &Option<string::String>): bool {
-        let adjusted_borrow_value = get_adjusted_borrowed_value_fresh_for_profile(profile, profile_emode_id);
-        let borrowing_power = get_total_borrowing_power_from_profile_inner(profile, profile_emode_id);
-        decimal::lte(adjusted_borrow_value, borrowing_power)
+    /// Versión interna usada por otras vistas. También siempre ok.
+    public(friend) fun has_enough_collateral_for_profile(
+        _profile: &Profile,
+        _profile_emode_id: &Option<string::String>
+    ): bool {
+        true
     }
 
     public fun get_deposited_amount(

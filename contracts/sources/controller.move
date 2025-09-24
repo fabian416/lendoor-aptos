@@ -704,25 +704,4 @@ module lendoor::controller {
             emode_id: string::utf8(b""),
         });
     }
-
-    // --- EMode User Operations ---
-    public entry fun enter_emode(account: &signer, profile_name: String, emode_id: String) {
-        let user_addr = signer::address_of(account); 
-        profile::set_emode(user_addr, option::some(emode_id));
-        event::emit(ProfileEModeSet {
-            user_addr: user_addr,
-            profile_name: profile_name,
-            emode_id: emode_id,
-        });
-    }
-
-    public entry fun exit_emode(account: &signer, profile_name: String) {
-        let user_addr = signer::address_of(account); 
-        profile::set_emode(user_addr, option::none());
-        event::emit(ProfileEModeSet {
-            user_addr: user_addr,
-            profile_name: profile_name,
-            emode_id: string::utf8(b""),
-        });
-    }
 }

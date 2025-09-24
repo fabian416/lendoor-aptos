@@ -445,7 +445,7 @@ module lendoor::profile {
         };
 
         emit_borrow_event(user_addr, profile, reserve_type_info);
-        (withdrawal_lp_amount, borrow_amount_final, CheckEquity { user_addr })
+        (withdrawal_lp_amount, borrow_amount_final)
     }
     
     /// Returns the (withdraw amount in terms of LP tokens, borrow amount).
@@ -720,80 +720,6 @@ module lendoor::profile {
             borrowed_share_decimal: decimal::raw(borrowed_share),
         })
     }
-
-
-    #[view]
-    /// Returns whether the profile is eligible for the specified emode.
-    /// # Returns
-    ///
-    /// * `bool`: is eligible or not. (will be `true` if the profile is alredy in emode)
-    /// * `bool`: has enough collateral or not if the profile enter the emode.
-    /// * `vector<string::String>`: which reserves make profile ineligible for the emode.
-    public fun is_eligible_for_emode(
-        user_addr: address,
-        emode_id: string::String
-    ): (bool, bool, vector<string::String>) acquires Profile {
-        let profile = borrow_global<Profile>(user_addr);
-
-        if (emode_category::profile_emode(user_addr) == option::some(emode_id)) {
-            (true, has_enough_collateral_for_profile(profile, &option::some(emode_id)), vector::empty())
-        } else {
-            let ineligible_reserves = vector::empty();
-            let borrowed_reserves = &profile.borrowed_reserves;
-            let borrowed_key = iterable_table::head_key(borrowed_reserves);
-            while (option::is_some(&borrowed_key)) {
-                let borrowed_type = *option::borrow(&borrowed_key);
-                let (_, _, next) = iterable_table::borrow_iter(borrowed_reserves, &borrowed_type);
-
-                if (!emode_category::reserve_in_emode_t(&emode_id, borrowed_type)) {
-                    vector::push_back(&mut ineligible_reserves, type_info_to_name(borrowed_type));
-                };
-                borrowed_key = next;
-            };
-
-            if (
-                vector::length(&ineligible_reserves) > 0 ||
-                !has_enough_collateral_for_profile(profile, &option::some(emode_id))
-            ) {
-                (false, false, ineligible_reserves)
-            } else {
-                (true, true, ineligible_reserves)
-            }
-        }
-    }
-
-
-    public(friend) fun set_emode(user_addr: address, emode_id_x: Option<string::String>) acquires Profile {
-        let profile = borrow_global<Profile>(user_addr);
-
-        if (option::is_some(&emode_id_x)) {
-            let borrowed_reserves = &profile.borrowed_reserves;
-            let borrowed_key = iterable_table::head_key(borrowed_reserves);
-            let emode_id = option::extract(&mut emode_id_x);
-
-            while (option::is_some(&borrowed_key)) {
-                let borrowed_type = *option::borrow(&borrowed_key);
-                let (_, _, next) = iterable_table::borrow_iter(borrowed_reserves, &borrowed_type);
-
-                assert!(
-                    emode_category::reserve_in_emode_t(&emode_id, borrowed_type),
-                    EPROFILE_EMODE_DIFF_WITH_RESERVE
-                );
-
-                borrowed_key = next;
-            };
-
-            emode_category::profile_enter_emode(user_addr, emode_id);
-        } else {
-            emode_category::profile_exit_emode(user_addr);
-        };
-
-        assert!(
-            has_enough_collateral_for_profile(profile, &emode_id_x),
-            EPROFILE_NOT_ENOUGH_COLLATERAL
-        );
-    }
-
 
     public(friend) fun asset_borrow_factor(_profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): u8 {
         reserve::borrow_factor(*reserve_type)

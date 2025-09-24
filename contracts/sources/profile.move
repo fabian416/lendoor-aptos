@@ -367,11 +367,10 @@ module lendoor::profile {
         user_addr: address,
         reserve_type_info: TypeInfo,
         amount: u64
-    ): CheckEquity acquires Profile {
+    ) acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
         remove_collateral_profile(profile, reserve_type_info, amount);
         emit_deposit_event(user_addr, profile, reserve_type_info);
-        CheckEquity { user_addr }
     }
 
     /// Returns: removed reward shares
@@ -403,10 +402,9 @@ module lendoor::profile {
         reserve_type_info: TypeInfo,
         amount: u64,
         allow_borrow: bool,
-    ): (u64, u64, CheckEquity) acquires Profile {
+    ): (u64, u64) acquires Profile {
         withdraw_internal(user_addr, reserve_type_info, amount, allow_borrow)
     }
-
 
     /// We return a struct hot potato `CheckEquity` to enforce health check after withdraw. The design makes 
     /// it possible to `withdraw`, do some trading on DEXes, then `deposit` and finally use `has_enough_collateral`

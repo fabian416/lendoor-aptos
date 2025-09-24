@@ -330,24 +330,25 @@ module lendoor::controller {
     /// This function should rarely be used. Use `withdraw` directly for simplicity.
     public entry fun remove_collateral<Coin0>(
         account: &signer,
-        profile_name: vector<u8>,
+        profile_name: vector<u8>, // lo puedes mantener solo para el evento
         amount: u64,
     ) {
         let addr = signer::address_of(account);
-        let check_equity = profile::remove_collateral(
-        addr, reserve::type_info<Coin0>(), amount);
-        profile::check_enough_collateral(check_equity);
 
+        // Solo book-keeping en Profile (ya NO devuelve CheckEquity)
+        profile::remove_collateral(addr, reserve::type_info<Coin0>(), amount);
+
+        // Mover los LP del reserve al usuario
         let lp_coin = reserve::remove_collateral<Coin0>(amount);
         utils::deposit_coin<LP<Coin0>>(account, lp_coin);
 
+        // Emitimos el evento igual que antes (si no quieres warnings, puedes usar `_profile_name`)
         event::emit(RemoveLPShareEvent<Coin0> {
-            user_addr: signer::address_of(account),
+            user_addr: addr,
             profile_name: string::utf8(profile_name),
             lp_amount: amount,
         })
     }
-
     /// Deposit funds into the Aries protocol, this can result in two scenarios:
     ///
     /// 1. User has an existing `Coin0` loan: the amount will first used to repay the loan then the

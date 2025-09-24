@@ -80,12 +80,6 @@ module lendoor::profile {
         borrowed_share: Decimal
     }   
 
-    /// A hot potato struct to make sure equity is checked for a given `Profile`.
-    struct CheckEquity {
-        /// The address of the user.
-        user_addr: address,
-    }
-
     #[event]
     struct SyncProfileDepositEvent has drop, store {
         user_addr: address,
@@ -262,29 +256,6 @@ module lendoor::profile {
         decimal::sub(total_borrowing_power, total_borrowed_value)
     }
 
-    public(friend) fun read_check_equity_data(check_equity: &CheckEquity): address {
-        check_equity.user_addr
-    }
-
-    /// Now NO-op function, just to consume the `CheckEquity` resource.
-    public fun check_enough_collateral(check_equity: CheckEquity) {
-        // We consume the resource to avoid leaking anything and avoid 'drop' required
-        let CheckEquity { user_addr: _ } = check_equity;
-        // no-op
-    }
-
-    public fun has_enough_collateral(_user_addr: address): bool {
-        true
-    }
-    
-    /// Internal vrsion used by other views. Also always ok.
-    public(friend) fun has_enough_collateral_for_profile(
-        _profile: &Profile,
-        _profile_emode_id: &Option<string::String>
-    ): bool {
-        true
-    }
-
     public fun get_deposited_amount(
         user_addr: address,
         reserve_type_info: TypeInfo
@@ -445,7 +416,7 @@ module lendoor::profile {
         reserve_type_info: TypeInfo,
         amount: u64,
         allow_borrow: bool,
-    ): (u64, u64, CheckEquity) acquires Profile {
+    ): (u64, u64) acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
         let profile_emode = emode_category::profile_emode(user_addr);
 

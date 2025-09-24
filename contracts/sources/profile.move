@@ -2,7 +2,6 @@ module lendoor::profile {
     use std::option::{Self, Option};
     use std::string::{Self};
     use std::signer;
-    use std::vector;
 
     use aptos_std::type_info::{Self, TypeInfo};
     use aptos_std::event::{Self};
@@ -12,7 +11,6 @@ module lendoor::profile {
     use lendoor::reserve::{Self};
     use decimal::decimal::{Self, Decimal};
     use util_types::iterable_table::{Self as iterable_table, IterableTable};
-    use lendoor::emode_category::{Self as emode_category};
 
     friend lendoor::controller;
     //
@@ -138,7 +136,8 @@ module lendoor::profile {
     /// The total bororwing power assuming no borrow.
     public fun get_total_borrowing_power(addr: address): Decimal acquires Profile {
         let profile = borrow_global<Profile>(addr);
-        get_total_borrowing_power_from_profile_inner(profile, &emode_category::profile_emode(addr))
+        let no_emode = option::none<string::String>();
+        get_total_borrowing_power_from_profile_inner(profile, &no_emode)
     }
 
     public(friend) fun get_total_borrowing_power_from_profile_inner(profile: &Profile, profile_emode_id: &Option<string::String>): Decimal {
@@ -183,7 +182,7 @@ module lendoor::profile {
             let (val, _, next) = iterable_table::borrow_iter(
                 &profile.deposited_reserves, &type_info);
 
-            let liquidation_thereshold_pct: u8 = asset_liquidation_threshold(profile_emode_id, &type_info);
+            let liquidation_thereshold_pct: u8 = 0;            
             let liquidation_thereshold = decimal::from_percentage((liquidation_thereshold_pct as u128));
 
             let price: Decimal = asset_price(profile_emode_id, &type_info);
@@ -212,9 +211,9 @@ module lendoor::profile {
     /// Caller needs to ensure the interest is accrued before calling this.
     public fun get_adjusted_borrowed_value(user_addr: address): Decimal acquires Profile {
         let profile = borrow_global<Profile>(user_addr);
-        get_adjusted_borrowed_value_fresh_for_profile(profile, &emode_category::profile_emode(user_addr))
+        let no_emode = option::none<string::String>();
+        get_adjusted_borrowed_value_fresh_for_profile(profile, &no_emode)
     }
-
     /// Get the risk-adjusted borrow value
     ///
     /// This takes into account the `borrow_factor` which is based on an asset's
@@ -248,7 +247,6 @@ module lendoor::profile {
     /// Get the borrowing power that is still available, measured in dollars.
     public fun available_borrowing_power(user_addr: address): Decimal acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
-        let profile_emode = emode_category::profile_emode(user_addr);
 
         let total_borrowed_value = get_adjusted_borrowed_value_fresh_for_profile(profile, &profile_emode);
         let total_borrowing_power = get_total_borrowing_power_from_profile_inner(profile, &profile_emode);
@@ -416,7 +414,6 @@ module lendoor::profile {
         allow_borrow: bool,
     ): (u64, u64) acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
-        let profile_emode = emode_category::profile_emode(user_addr);
 
         // 1) calcular retiro + faltante
         let (withdrawal_lp_amount, borrow_amount_unchecked) = withdraw_profile(
@@ -493,7 +490,6 @@ module lendoor::profile {
         user_addr: address,
         reserve_type_info: TypeInfo,
     ): u64 acquires Profile {
-        let profile_emode = emode_category::profile_emode(user_addr);
         if (!can_borrow_asset(&profile_emode, &reserve_type_info)) {
             0
         } else {
@@ -561,7 +557,6 @@ module lendoor::profile {
         actual_repay_amount
     }
 
-
     public(friend) fun liquidate(
         user_addr: address,
         repay_reserve_type_info: TypeInfo,
@@ -570,7 +565,6 @@ module lendoor::profile {
     ): (u64, u64) acquires Profile {
         assert!(repay_amount > 0, 0);
         let profile = borrow_global_mut<Profile>(user_addr);
-        let profile_emode = emode_category::profile_emode(user_addr);
 
         let (actual_repay_amount, withdraw_amount) = liquidate_profile(
             profile,
@@ -725,31 +719,12 @@ module lendoor::profile {
         reserve::borrow_factor(*reserve_type)
     }
 
-    public(friend) fun asset_ltv(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): u8 {
-        let reserve_emode = emode_category::reserve_emode_t(*reserve_type);
-        if (emode_is_matching(profile_emode_id, &reserve_emode)) {
-            emode_category::emode_loan_to_value(option::extract(&mut reserve_emode))
-        } else {
-            reserve::loan_to_value(*reserve_type)
-        }
-    }
-
-    public(friend) fun asset_liquidation_threshold(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): u8 {
-        let reserve_emode = emode_category::reserve_emode_t(*reserve_type);
-        if (emode_is_matching(profile_emode_id, &reserve_emode)) {
-            emode_category::emode_liquidation_threshold(option::extract(&mut reserve_emode))
-        } else {
-            reserve::liquidation_threshold(*reserve_type)
-        }
-    }
-
-    public(friend) fun asset_liquidation_bonus_bips(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): u64 {
-        let reserve_emode = emode_category::reserve_emode_t(*reserve_type);
-        if (emode_is_matching(profile_emode_id, &reserve_emode)) {
-            emode_category::emode_liquidation_bonus_bips(option::extract(&mut reserve_emode))
-        } else {
-            reserve::liquidation_bonus_bips(*reserve_type)
-        }
+    public(friend) fun asset_ltv(
+        _profile_emode_id: &Option<string::String>,
+        _reserve_type: &TypeInfo
+    ): u8 {
+        // In an uncollat mode it doensn't apply 
+        0
     }
 
     public(friend) fun asset_price(
@@ -757,16 +732,6 @@ module lendoor::profile {
         _reserve_type: &TypeInfo
     ): Decimal {
         decimal::one()
-    }
-
-    public(friend) fun can_borrow_asset(profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): bool {
-        let reserve_emode = emode_category::reserve_emode_t(*reserve_type);
-        if (option::is_some(profile_emode_id)) {
-            // Only delete assets of the same e-mode.
-            emode_is_matching(profile_emode_id, &reserve_emode)
-        } else {
-            true
-        }
     }
 
     public(friend) fun emode_is_matching(profile_emode_id: &Option<string::String>, reserve_emode_id: &Option<string::String>): bool {

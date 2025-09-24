@@ -1,10 +1,7 @@
 module lendoor::controller {
     use std::signer;
-    use std::option::{Self};
-    use std::string::{Self, String};
-
+    use std::string::Self;
     use aptos_std::event::{Self};
-    use aptos_std::type_info::{Self};
 
     use aptos_framework::coin::{Self, Coin};
     use aptos_framework::fungible_asset::{Metadata};
@@ -18,7 +15,6 @@ module lendoor::controller {
     use lendoor_config::reserve_config;
     use lendoor::profile;
     use lendoor::utils;
-    use lendoor::emode_category;
     use lendoor::fa_to_coin_wrapper;
 
     //
@@ -182,11 +178,7 @@ module lendoor::controller {
     public entry fun init(account: &signer, admin_addr: address) {
         controller_config::init_config(account, admin_addr);
         reserve::init(account);
-        emode_category::init(account, admin_addr);
         credit_manager::init(account); // << new
-    }
-    public entry fun init_emode(account: &signer) {
-        emode_category::init(account, signer::address_of(account));
     }
 
     public entry fun init_wrapper_fa_signer(account: &signer) {

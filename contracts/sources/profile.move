@@ -488,22 +488,6 @@ module lendoor::profile {
         (withdraw_lp_amount, remaining_borrow_amount)
     }
 
-
-    public fun max_borrow_amount(
-        user_addr: address,
-        reserve_type_info: TypeInfo,
-    ): u64 acquires Profile {
-        if (!can_borrow_asset(&profile_emode, &reserve_type_info)) {
-            0
-        } else {
-            let avail = available_borrowing_power(user_addr);
-            let price = asset_price(&profile_emode, &reserve_type_info);
-            let bf = asset_borrow_factor(&profile_emode, &reserve_type_info);
-            let max_value = decimal::mul(avail, decimal::from_percentage((bf as u128)));
-            decimal::as_u64(decimal::div(max_value, price))
-        }
-    }
-
     fun borrow_profile(
         profile: &mut Profile,
         _profile_emode_id: &Option<string::String>, // ya no lo usás, lo dejo con '_' para no dar warning
@@ -529,15 +513,18 @@ module lendoor::profile {
         );
         borrowed_reserve.borrowed_share = decimal::add(borrowed_reserve.borrowed_share, borrowed_share);
     }
+
+
     /// helper function to check if the asset can be borrowed in the current e-mode
     public fun max_borrow_amount(
         user_addr: address,
         reserve_type_info: TypeInfo,
-    ): u64 acquires Profile {
-        let limit = credit_manager::get_limit(user_addr, reserve_type_info);
-        let used  = credit_manager::get_usage(user_addr, reserve_type_info);
+    ): u64 {
+        let limit = credit_manager::get_limit_t(user_addr, reserve_type_info);
+        let used  = credit_manager::get_usage_t(user_addr, reserve_type_info);
         if (limit > used) { limit - used } else { 0 }
     }
+
 
     fun repay_profile(
         profile: &mut Profile,
@@ -567,131 +554,6 @@ module lendoor::profile {
         };
 
         actual_repay_amount
-    }
-
-    public(friend) fun liquidate(
-        user_addr: address,
-        repay_reserve_type_info: TypeInfo,
-        withdraw_reserve_type_info: TypeInfo,
-        repay_amount: u64
-    ): (u64, u64) acquires Profile {
-        assert!(repay_amount > 0, 0);
-        let profile = borrow_global_mut<Profile>(user_addr);
-
-        let (actual_repay_amount, withdraw_amount) = liquidate_profile(
-            profile,
-            &profile_emode,
-            repay_reserve_type_info,
-            withdraw_reserve_type_info,
-            repay_amount
-        );
-
-        // events WITHOUT profile_name
-        emit_deposit_event(user_addr, profile, withdraw_reserve_type_info);
-        emit_borrow_event(user_addr, profile, repay_reserve_type_info);
-
-        (actual_repay_amount, withdraw_amount)
-    }
-
-
-    // TODO: Consider adding dynamic liquidation bonus.
-    /// Returns the (actual_repay_amount, actual_withdraw_amount) and update the `Profile`.
-    fun liquidate_profile(
-        profile: &mut Profile,
-        profile_emode_id: &Option<string::String>,
-        repay_reserve_type_info: TypeInfo,
-        withdraw_reserve_type_info: TypeInfo,
-        repay_amount: u64
-    ): (u64, u64) {
-        let total_borrowed_value = get_adjusted_borrowed_value_fresh_for_profile(profile, profile_emode_id);
-        let liquidation_borrowed_value = get_liquidation_borrow_value_inner(profile, profile_emode_id);
-
-        assert!(decimal::gte(total_borrowed_value, liquidation_borrowed_value), EPROFILE_IS_HEALTHY);
-        assert!(iterable_table::contains(&profile.borrowed_reserves, &repay_reserve_type_info), EPROFILE_NO_BORROWED_RESERVE);
-        assert!(iterable_table::contains(&profile.deposited_reserves, &withdraw_reserve_type_info), EPROFILE_NO_DEPOSIT_RESERVE);
-
-        let repay_reserve = iterable_table::borrow_mut(&mut profile.borrowed_reserves, &repay_reserve_type_info);
-        let withdraw_reserve = iterable_table::borrow_mut(&mut profile.deposited_reserves, &withdraw_reserve_type_info);
-
-        let borrowed_amount = reserve::get_borrow_amount_from_share_dec(repay_reserve_type_info, repay_reserve.borrowed_share);
-
-        let liquidation_bonus_bips = decimal::from_bips(
-            (asset_liquidation_bonus_bips(profile_emode_id, &withdraw_reserve_type_info) as u128)
-        );
-        let bonus_rate = decimal::add(decimal::one(), liquidation_bonus_bips);
-        let max_amount = decimal::min(decimal::from_u64(repay_amount), borrowed_amount);
-        let borrowed_asset_price = asset_price(profile_emode_id, &repay_reserve_type_info);
-        let withdraw_asset_price = asset_price(profile_emode_id, &withdraw_reserve_type_info);
-        let collateral_amount = reserve::get_underlying_amount_from_lp_amount(
-            withdraw_reserve_type_info,
-            withdraw_reserve.collateral_amount
-        );
-        let collateral_value = decimal::mul(decimal::from_u64(collateral_amount), withdraw_asset_price);
-
-        let (actual_repay_amount, withdraw_amount, settled_share_amount) =
-            if (decimal::lt(borrowed_amount, decimal::from_u64(LIQUIDATION_CLOSE_AMOUNT))) {
-                let liquidation_value = decimal::mul(borrowed_amount, borrowed_asset_price);
-                let bonus_liquidation_value = decimal::mul(liquidation_value, bonus_rate);
-
-                if (decimal::gte(bonus_liquidation_value, collateral_value)) {
-                    let repay_pct = decimal::div(collateral_value, bonus_liquidation_value);
-                    (
-                        decimal::ceil_u64(decimal::mul(max_amount, repay_pct)),
-                        withdraw_reserve.collateral_amount,
-                        repay_reserve.borrowed_share
-                    )
-                } else {
-                    let withdraw_pct = decimal::div(bonus_liquidation_value, collateral_value);
-                    (
-                        decimal::ceil_u64(max_amount),
-                        decimal::floor_u64(decimal::mul_u64(withdraw_pct, withdraw_reserve.collateral_amount)),
-                        repay_reserve.borrowed_share
-                    )
-                }
-            } else {
-                let max_liquidation_value_for_repay_reserve = decimal::mul(borrowed_asset_price, max_amount);
-                let fractionalised_max_liqudiation_value =
-                    decimal::mul(total_borrowed_value, decimal::from_percentage(LIQUIDATION_CLOSE_FACTOR_PERCENTAGE));
-                let max_liquidation_value =
-                    decimal::min(max_liquidation_value_for_repay_reserve, fractionalised_max_liqudiation_value);
-
-                let max_liquidation_amount = decimal::div(max_liquidation_value, borrowed_asset_price);
-                let bonus_liquidation_value = decimal::mul(max_liquidation_value, bonus_rate);
-
-                if (decimal::gte(bonus_liquidation_value, collateral_value)) {
-                    let repay_percentage = decimal::div(collateral_value, bonus_liquidation_value);
-                    let settled_amount = decimal::mul(max_liquidation_amount, repay_percentage);
-                    let repay_amount = decimal::ceil_u64(settled_amount);
-                    let withdraw_amount = withdraw_reserve.collateral_amount;
-                    let settled_share = decimal::min(
-                        reserve::get_share_amount_from_borrow_amount_dec(repay_reserve_type_info, settled_amount),
-                        repay_reserve.borrowed_share
-                    );
-                    (repay_amount, withdraw_amount, settled_share)
-                } else {
-                    let withdraw_percentage = decimal::div(bonus_liquidation_value, collateral_value);
-                    let settled_amount = max_liquidation_amount;
-                    let repay_amount = decimal::ceil_u64(settled_amount);
-                    let withdraw_amount = decimal::floor_u64(decimal::mul_u64(withdraw_percentage, withdraw_reserve.collateral_amount));
-                    let settled_share = decimal::min(
-                        reserve::get_share_amount_from_borrow_amount_dec(repay_reserve_type_info, settled_amount),
-                        repay_reserve.borrowed_share
-                    );
-                    (repay_amount, withdraw_amount, settled_share)
-                }
-            };
-
-        repay_reserve.borrowed_share = decimal::sub(repay_reserve.borrowed_share, settled_share_amount);
-        withdraw_reserve.collateral_amount = withdraw_reserve.collateral_amount - withdraw_amount;
-
-        if (decimal::eq(repay_reserve.borrowed_share, decimal::zero())) {
-            iterable_table::remove(&mut profile.borrowed_reserves, &repay_reserve_type_info);
-        };
-        if (withdraw_reserve.collateral_amount == 0) {
-            iterable_table::remove(&mut profile.deposited_reserves, &withdraw_reserve_type_info);
-        };
-
-        (actual_repay_amount, withdraw_amount)
     }
 
     fun emit_deposit_event(

@@ -4,9 +4,10 @@ module lendoor::credit_manager {
     use util_types::iterable_table::{Self as itab, IterableTable};
     use aptos_std::simple_map::{Self as ref_map, SimpleMap};
     use lendoor::controller_config;
-
     // Used by profile
     friend lendoor::profile;
+    friend lendoor::controller;
+
 
     const E_NOT_INITIALIZED: u64 = 1;
     const E_LIMIT_EXCEEDED: u64 = 2;
@@ -154,6 +155,30 @@ module lendoor::credit_manager {
         if (!ref_map::contains_key<address, UserBook>(&g.users, &user)) { 0 } else {
             let book = ref_map::borrow<address, UserBook>(&g.users, &user);
             let asset = type_info::type_of<AssetType>();
+            if (!itab::contains<TypeInfo, u64>(&book.usage, &asset)) { 0 } else {
+                *itab::borrow<TypeInfo, u64>(&book.usage, &asset)
+            }
+        }
+    }
+
+    #[view]
+    public(friend) fun get_limit_t(user: address, asset: TypeInfo): u64 acquires GlobalCredit {
+        assert!(exists<GlobalCredit>(@lendoor), E_NOT_INITIALIZED);
+        let g = borrow_global<GlobalCredit>(@lendoor);
+        if (!ref_map::contains_key<address, UserBook>(&g.users, &user)) { 0 } else {
+            let book = ref_map::borrow<address, UserBook>(&g.users, &user);
+            if (!itab::contains<TypeInfo, u64>(&book.limits, &asset)) { 0 } else {
+                *itab::borrow<TypeInfo, u64>(&book.limits, &asset)
+            }
+        }
+    }
+
+    #[view]
+    public(friend) fun get_usage_t(user: address, asset: TypeInfo): u64 acquires GlobalCredit {
+        assert!(exists<GlobalCredit>(@lendoor), E_NOT_INITIALIZED);
+        let g = borrow_global<GlobalCredit>(@lendoor);
+        if (!ref_map::contains_key<address, UserBook>(&g.users, &user)) { 0 } else {
+            let book = ref_map::borrow<address, UserBook>(&g.users, &user);
             if (!itab::contains<TypeInfo, u64>(&book.usage, &asset)) { 0 } else {
                 *itab::borrow<TypeInfo, u64>(&book.usage, &asset)
             }

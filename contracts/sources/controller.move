@@ -358,8 +358,8 @@ module lendoor::controller {
         deposit_for<Coin0>(account, profile_name, amount, addr, repay_only);
     }
 
-    /// Deposit fund on behalf of someone else, useful when a given profile is insolvent and third party can step in
-    /// to repay on behalf of the owner. 
+    /// Deposit fund on behalf of someone else, useful when a given profile is insolvent
+    /// and a third party can step in to repay on behalf of the owner.
     public fun deposit_for<Coin0>(
         account: &signer,
         profile_name: vector<u8>,
@@ -367,15 +367,33 @@ module lendoor::controller {
         receiver_addr: address,
         repay_only: bool,
     ) {
+        // Calcula cuánto va a repago y cuánto a depósito (según repay_only).
         let (repay_amount, deposit_amount) = profile::deposit(
             receiver_addr,
             reserve::type_info<Coin0>(),
             amount,
             repay_only
         );
-        let repay_coin = coin::withdraw<Coin0>(account, repay_amount);
-        let deposit_coin = coin::withdraw<Coin0>(account, deposit_amount);
-        deposit_coin_to_reserve<Coin0>(repay_coin, deposit_coin);
+
+        // 1) REPAGO con hook al credit_manager
+        if (repay_amount > 0) {
+            let repay_coin = coin::withdraw<Coin0>(account, repay_amount);
+            let remaining = reserve::repay<Coin0>(repay_coin);
+            let actual_repay = repay_amount - coin::value(&remaining);
+            // devuelve el cambio (si lo hubo) al `account`
+            utils::deposit_coin<Coin0>(account, remaining);
+            // notifica al credit_manager por el usuario receiver_addr
+            if (actual_repay > 0) {
+                credit_manager::on_repay(receiver_addr, reserve::type_info<Coin0>(), actual_repay);
+            };
+        };
+
+        // 2) DEPÓSITO → mint LP y añadir a colateral del pool (no afecta "usage")
+        if (deposit_amount > 0) {
+            let deposit_coin = coin::withdraw<Coin0>(account, deposit_amount);
+            let lp = reserve::mint<Coin0>(deposit_coin);
+            reserve::add_collateral<Coin0>(lp);
+        };
 
         event::emit(DepositEvent<Coin0> {
             sender: signer::address_of(account),
@@ -387,7 +405,6 @@ module lendoor::controller {
             deposit_amount: deposit_amount,
         });
     }
-
     /// [Deprecated] use `deposit_and_repay_for` instead
     public fun deposit_coin_for<Coin0>(
         addr: address,
@@ -494,72 +511,6 @@ module lendoor::controller {
         };
         coin::merge<Coin0>(&mut borrowed_coin, withdraw_coin);
         borrowed_coin
-    }
-
-    fun liquidate_impl<RepayCoin, WithdrawCoin>(
-        liquidator_account: &signer,
-        liquidatee_addr: address,
-        liquidatee_profile_name: vector<u8>,
-        amount: u64,
-        redeem_lp: bool
-    ) {
-        let (actual_repay_amount, withdraw_amount) = profile::liquidate(
-            liquidatee_addr,
-            reserve::type_info<RepayCoin>(), 
-            reserve::type_info<WithdrawCoin>(), 
-            amount
-        );
-
-        let coin = coin::withdraw<RepayCoin>(liquidator_account, actual_repay_amount);
-        let remaining_coin = reserve::repay<RepayCoin>(coin);
-        let collateral_lp_coin = reserve::remove_collateral<WithdrawCoin>(withdraw_amount);
-        let collateral_lp_coin_after_fee = reserve::charge_liquidation_fee(collateral_lp_coin);
-
-        // update amount repaid
-        actual_repay_amount = actual_repay_amount - coin::value(&remaining_coin);
-        let liquidation_fee_amount = withdraw_amount - coin::value(&collateral_lp_coin_after_fee);
-
-        utils::deposit_coin<RepayCoin>(liquidator_account, remaining_coin);
-
-        let redeem_lp_amount = if (redeem_lp) {
-            let redeemed_coin = reserve::redeem(collateral_lp_coin_after_fee);
-            let redeemed_amount = coin::value(&redeemed_coin);
-            utils::deposit_coin<WithdrawCoin>(liquidator_account, redeemed_coin);
-            redeemed_amount
-        } else {
-            utils::deposit_coin(liquidator_account, collateral_lp_coin_after_fee);
-            0
-        };
-
-        event::emit(LiquidateEvent<RepayCoin, WithdrawCoin> {
-            liquidator: signer::address_of(liquidator_account),
-            liquidatee: liquidatee_addr,
-            liquidatee_profile_name: string::utf8(liquidatee_profile_name),
-            repay_amount_in: amount,
-            redeem_lp: redeem_lp,
-            repay_amount: actual_repay_amount,
-            withdraw_lp_amount: withdraw_amount,
-            liquidation_fee_amount: liquidation_fee_amount,
-            redeem_lp_amount: redeem_lp_amount,
-        })
-    }
-
-    public entry fun liquidate<RepayCoin, WithdrawCoin>(
-        liquidator_account: &signer,
-        liquidatee_addr: address,
-        liquidatee_profile_name: vector<u8>,
-        amount: u64
-    ) {
-       liquidate_impl<RepayCoin, WithdrawCoin>(liquidator_account, liquidatee_addr, liquidatee_profile_name, amount, false);
-    }
-
-    public entry fun liquidate_and_redeem<RepayCoin, WithdrawCoin>(
-        liquidator_account: &signer,
-        liquidatee_addr: address,
-        liquidatee_profile_name: vector<u8>,
-        amount: u64
-    ) {
-       liquidate_impl<RepayCoin, WithdrawCoin>(liquidator_account, liquidatee_addr, liquidatee_profile_name, amount, true);
     }
 
     public entry fun update_reserve_config<Coin0>(

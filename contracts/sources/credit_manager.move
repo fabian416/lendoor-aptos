@@ -133,35 +133,19 @@ module lendoor::credit_manager {
         if (*used_ref > amount) { *used_ref = *used_ref - amount } else { *used_ref = 0 };
     }
 
-    /************************ Public (generic) views ************************/
-
+    // --- generic views (for RPC / off-chain) ---
     #[view]
     public fun get_limit<AssetType>(user: address): u64 acquires GlobalCredit {
-        assert!(exists<GlobalCredit>(@lendoor), E_NOT_INITIALIZED);
-        let g = borrow_global<GlobalCredit>(@lendoor);
-        if (!ref_map::contains_key<address, UserBook>(&g.users, &user)) { 0 } else {
-            let book = ref_map::borrow<address, UserBook>(&g.users, &user);
-            let asset = type_info::type_of<AssetType>();
-            if (!itab::contains<TypeInfo, u64>(&book.limits, &asset)) { 0 } else {
-                *itab::borrow<TypeInfo, u64>(&book.limits, &asset)
-            }
-        }
+        get_limit_t(user, type_info::type_of<AssetType>())
     }
 
     #[view]
     public fun get_usage<AssetType>(user: address): u64 acquires GlobalCredit {
-        assert!(exists<GlobalCredit>(@lendoor), E_NOT_INITIALIZED);
-        let g = borrow_global<GlobalCredit>(@lendoor);
-        if (!ref_map::contains_key<address, UserBook>(&g.users, &user)) { 0 } else {
-            let book = ref_map::borrow<address, UserBook>(&g.users, &user);
-            let asset = type_info::type_of<AssetType>();
-            if (!itab::contains<TypeInfo, u64>(&book.usage, &asset)) { 0 } else {
-                *itab::borrow<TypeInfo, u64>(&book.usage, &asset)
-            }
-        }
+        get_usage_t(user, type_info::type_of<AssetType>())
     }
 
-    #[view]
+    // --- internal views (for other modules) ---
+    // IMPORTANT: WITHOUT #[view]
     public(friend) fun get_limit_t(user: address, asset: TypeInfo): u64 acquires GlobalCredit {
         assert!(exists<GlobalCredit>(@lendoor), E_NOT_INITIALIZED);
         let g = borrow_global<GlobalCredit>(@lendoor);
@@ -173,7 +157,6 @@ module lendoor::credit_manager {
         }
     }
 
-    #[view]
     public(friend) fun get_usage_t(user: address, asset: TypeInfo): u64 acquires GlobalCredit {
         assert!(exists<GlobalCredit>(@lendoor), E_NOT_INITIALIZED);
         let g = borrow_global<GlobalCredit>(@lendoor);

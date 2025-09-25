@@ -506,13 +506,14 @@ module lendoor::profile {
 
     fun borrow_profile(
         profile: &mut Profile,
-        profile_emode_id: &Option<string::String>,
+        _profile_emode_id: &Option<string::String>, // ya no lo usás, lo dejo con '_' para no dar warning
         reserve_type_info: TypeInfo,
         amount: u64,
     ) {
+        // no permitir pedir prestado del mismo asset que está como colateral (si aplica a tu diseño)
         assert!(!iterable_table::contains(&profile.deposited_reserves, &reserve_type_info), 0);
-        assert!(can_borrow_asset(profile_emode_id, &reserve_type_info), EPROFILE_EMODE_DIFF_WITH_RESERVE);
 
+        // (el check de límites lo hacés ANTES, en withdraw_internal, con credit_manager)
         let fee_amount = reserve::calculate_borrow_fee_using_borrow_type(
             reserve_type_info,
             amount,
@@ -528,7 +529,6 @@ module lendoor::profile {
         );
         borrowed_reserve.borrowed_share = decimal::add(borrowed_reserve.borrowed_share, borrowed_share);
     }
-
     /// helper function to check if the asset can be borrowed in the current e-mode
     public fun max_borrow_amount(
         user_addr: address,

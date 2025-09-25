@@ -247,6 +247,8 @@ module lendoor::profile {
     /// Get the borrowing power that is still available, measured in dollars.
     public fun available_borrowing_power(user_addr: address): Decimal acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
+        // sin e-mode: usamos None
+        let profile_emode: Option<string::String> = option::none();
 
         let total_borrowed_value = get_adjusted_borrowed_value_fresh_for_profile(profile, &profile_emode);
         let total_borrowing_power = get_total_borrowing_power_from_profile_inner(profile, &profile_emode);
@@ -415,6 +417,9 @@ module lendoor::profile {
     ): (u64, u64) acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
 
+        // Como ya no hay e-mode, usamos None.
+        let profile_emode: Option<string::String> = option::none();
+
         // 1) calcular retiro + faltante
         let (withdrawal_lp_amount, borrow_amount_unchecked) = withdraw_profile(
             profile,
@@ -424,7 +429,7 @@ module lendoor::profile {
             allow_borrow,
         );
 
-        // 2) si hay borrow, validar y “marcar” en el credit manager; producir el borrow_amount final
+        // 2) si hay borrow, validar límite y registrar uso
         let borrow_amount_final = if (allow_borrow && borrow_amount_unchecked > 0) {
             assert!(
                 credit_manager::can_borrow(user_addr, reserve_type_info, borrow_amount_unchecked),
@@ -432,11 +437,10 @@ module lendoor::profile {
             );
             credit_manager::on_borrow(user_addr, reserve_type_info, borrow_amount_unchecked);
 
-            // registra el préstamo en el perfil (book-keeping de shares)
+            // book-keeping del préstamo en el perfil
             borrow_profile(profile, &profile_emode, reserve_type_info, borrow_amount_unchecked);
 
-            // ya cubrimos el faltante vía borrow
-            0
+            0 // ya cubrimos el faltante con borrow
         } else {
             borrow_amount_unchecked
         };
@@ -444,7 +448,6 @@ module lendoor::profile {
         emit_borrow_event(user_addr, profile, reserve_type_info);
         (withdrawal_lp_amount, borrow_amount_final)
     }
-    
     /// Returns the (withdraw amount in terms of LP tokens, borrow amount).
     /// In the case of u64::max, we do not borrow, just withdraw all.
     fun withdraw_profile(
@@ -526,6 +529,15 @@ module lendoor::profile {
         borrowed_reserve.borrowed_share = decimal::add(borrowed_reserve.borrowed_share, borrowed_share);
     }
 
+    /// helper function to check if the asset can be borrowed in the current e-mode
+    public fun max_borrow_amount(
+        user_addr: address,
+        reserve_type_info: TypeInfo,
+    ): u64 acquires Profile {
+        let limit = credit_manager::get_limit(user_addr, reserve_type_info);
+        let used  = credit_manager::get_usage(user_addr, reserve_type_info);
+        if (limit > used) { limit - used } else { 0 }
+    }
 
     fun repay_profile(
         profile: &mut Profile,

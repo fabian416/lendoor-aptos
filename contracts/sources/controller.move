@@ -322,19 +322,16 @@ module lendoor::controller {
     /// This function should rarely be used. Use `withdraw` directly for simplicity.
     public entry fun remove_collateral<Coin0>(
         account: &signer,
-        profile_name: vector<u8>, // lo mantengo para el evento; si no lo usas, renómbralo a _profile_name
+        profile_name: vector<u8>,
         amount: u64,
     ) {
         let addr = signer::address_of(account);
 
-        // 1) Book-keeping en Profile (ya NO devuelve CheckEquity)
         profile::remove_collateral(addr, reserve::type_info<Coin0>(), amount);
 
-        // 2) Mover los LP del reserve al usuario
         let lp_coin = reserve::remove_collateral<Coin0>(amount);
         utils::deposit_coin<LP<Coin0>>(account, lp_coin);
 
-        // 3) Evento (puedes dejar el nombre para telemetría)
         event::emit(RemoveLPShareEvent<Coin0> {
             user_addr: addr,
             profile_name: string::utf8(profile_name),
@@ -458,22 +455,19 @@ module lendoor::controller {
         allow_borrow: bool,
     ) {
         let addr = signer::address_of(account);
-
-        // Ahora profile::withdraw devuelve (withdraw_amount, borrow_amount) SIN CheckEquity
         let (withdraw_amount, borrow_amount) = profile::withdraw(
             addr, reserve::type_info<Coin0>(), amount, allow_borrow
         );
 
-        let withdraw_coin = withdraw_from_reserve<Coin0>(
-            withdraw_amount,
-            borrow_amount,
-        );
+
+        let withdraw_coin = withdraw_from_reserve<Coin0>(withdraw_amount, borrow_amount);
+
 
         let actual_withdraw_amount = coin::value(&withdraw_coin);
         utils::deposit_coin<Coin0>(account, withdraw_coin);
 
         event::emit(WithdrawEvent<Coin0> {
-            sender: addr,
+            sender: signer::address_of(account),
             profile_name: string::utf8(profile_name),
             amount_in: amount,
             allow_borrow: allow_borrow,

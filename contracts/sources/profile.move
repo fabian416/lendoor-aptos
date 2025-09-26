@@ -417,10 +417,10 @@ module lendoor::profile {
     ): (u64, u64) acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
 
-        // Como ya no hay e-mode, usamos None.
+        // because we don't have e-mode, we use None
         let profile_emode: Option<string::String> = option::none();
 
-        // 1) calcular retiro + faltante
+        // calculate the withdrawal and the borrow amount if any
         let (withdrawal_lp_amount, borrow_amount_unchecked) = withdraw_profile(
             profile,
             &profile_emode,
@@ -429,7 +429,7 @@ module lendoor::profile {
             allow_borrow,
         );
 
-        // 2) si hay borrow, validar límite y registrar uso
+        // if there is no borrow, we just withdraw
         let borrow_amount_final = if (allow_borrow && borrow_amount_unchecked > 0) {
             assert!(
                 credit_manager::can_borrow(user_addr, reserve_type_info, borrow_amount_unchecked),
@@ -437,10 +437,10 @@ module lendoor::profile {
             );
             credit_manager::on_borrow(user_addr, reserve_type_info, borrow_amount_unchecked);
 
-            // book-keeping del préstamo en el perfil
+            // book keeping of the borrow in the profile
             borrow_profile(profile, &profile_emode, reserve_type_info, borrow_amount_unchecked);
 
-            0 // ya cubrimos el faltante con borrow
+            0 // we cover the borrow with the credit line
         } else {
             borrow_amount_unchecked
         };
@@ -490,14 +490,14 @@ module lendoor::profile {
 
     fun borrow_profile(
         profile: &mut Profile,
-        _profile_emode_id: &Option<string::String>, // ya no lo usás, lo dejo con '_' para no dar warning
+        _profile_emode_id: &Option<string::String>, // we don't use e-mode
         reserve_type_info: TypeInfo,
         amount: u64,
     ) {
-        // no permitir pedir prestado del mismo asset que está como colateral (si aplica a tu diseño)
+        // donn't allow borrowing the same asset as collateral (if it applies to your design)
         assert!(!iterable_table::contains(&profile.deposited_reserves, &reserve_type_info), 0);
 
-        // (el check de límites lo hacés ANTES, en withdraw_internal, con credit_manager)
+        // we assume that the caller already checked the credit limit
         let fee_amount = reserve::calculate_borrow_fee_using_borrow_type(
             reserve_type_info,
             amount,
@@ -514,7 +514,6 @@ module lendoor::profile {
         borrowed_reserve.borrowed_share = decimal::add(borrowed_reserve.borrowed_share, borrowed_share);
     }
 
-
     /// helper function to check if the asset can be borrowed in the current e-mode
     public fun max_borrow_amount(
         user_addr: address,
@@ -524,7 +523,6 @@ module lendoor::profile {
         let used  = credit_manager::get_usage_t(user_addr, reserve_type_info);
         if (limit > used) { limit - used } else { 0 }
     }
-
 
     fun repay_profile(
         profile: &mut Profile,
@@ -571,7 +569,6 @@ module lendoor::profile {
             collateral_amount,
         })
     }
-
 
     fun emit_borrow_event(
         user_addr: address,

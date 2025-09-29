@@ -33,6 +33,85 @@
     "@jridgewell/gen-mapping" "^0.3.5"
     "@jridgewell/trace-mapping" "^0.3.24"
 
+"@aptos-connect/wallet-adapter-plugin@2.5.2":
+  version "2.5.2"
+  resolved "https://registry.yarnpkg.com/@aptos-connect/wallet-adapter-plugin/-/wallet-adapter-plugin-2.5.2.tgz#29d5c01d5d3a47fa81dfa1dfa4d6a8a8310f8d9f"
+  integrity sha512-AR0wm9TNRaF13AYToJdwqWFmjCjqpvbSlUGdJX2mvp2XpsbkpHYr8iy6Y1i6qvXDZqOd7OSSSUzX34lI/vN+vg==
+  dependencies:
+    "@aptos-connect/wallet-api" "^0.3.2"
+    "@aptos-labs/wallet-standard" "^0.5.0"
+    "@identity-connect/crypto" "^0.2.9"
+    "@identity-connect/dapp-sdk" "^0.11.2"
+
+"@aptos-connect/wallet-api@^0.3.2":
+  version "0.3.2"
+  resolved "https://registry.yarnpkg.com/@aptos-connect/wallet-api/-/wallet-api-0.3.2.tgz#1d9766bfe1641abfe08370cf51c398f895b4ebcd"
+  integrity sha512-U85pKOb8oWmOdT/yusbq+SkWcYNRRi5C1J08bBvI9j14T/c3R7MaTKYjAXPggx3tTtPWF9B7huKduYbwL2GtWw==
+  dependencies:
+    "@aptos-labs/wallet-standard" "^0.5.0"
+    "@identity-connect/api" "^0.7.0"
+
+"@aptos-connect/web-transport@^0.3.2":
+  version "0.3.2"
+  resolved "https://registry.yarnpkg.com/@aptos-connect/web-transport/-/web-transport-0.3.2.tgz#fc89eb31f64314733f69c42a6011bbcf5a4d082f"
+  integrity sha512-qEfanBmCbPhqommSydckfK66EOkqWcb1LDg59zlPrU4nu7bSzfhfRBSUgkmkulNEhPDPqFPYshDLvjytcEIIRg==
+  dependencies:
+    "@aptos-connect/wallet-api" "^0.3.2"
+    uuid "^9.0.1"
+
+"@aptos-labs/aptos-cli@^1.0.2":
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/@aptos-labs/aptos-cli/-/aptos-cli-1.0.2.tgz#91bd1368cf808f715d102822b7d4032388cdad79"
+  integrity sha512-PYPsd0Kk3ynkxNfe3S4fanI3DiUICCoh4ibQderbvjPFL5A0oK6F4lPEO2t0MDsQySTk2t4vh99Xjy6Bd9y+aQ==
+  dependencies:
+    commander "^12.1.0"
+
+"@aptos-labs/aptos-client@^2.0.0":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/@aptos-labs/aptos-client/-/aptos-client-2.0.0.tgz#13331f038f7bbd5c942f0d1fee0018810008c08a"
+  integrity sha512-A23T3zTCRXEKURodp00dkadVtIrhWjC9uo08dRDBkh69OhCnBAxkENmUy/rcBarfLoFr60nRWt7cBkc8wxr1mg==
+
+"@aptos-labs/ts-sdk@^5.1.0":
+  version "5.1.0"
+  resolved "https://registry.yarnpkg.com/@aptos-labs/ts-sdk/-/ts-sdk-5.1.0.tgz#5d61365d440d02e77aac66a01a40881c17f8edd0"
+  integrity sha512-rhlOFbK+5/XACkIEBc7jBjGZ4QIQVIxTD2GGlf906n5Ljq5f7jAV6Fer+0y2pRaP3JgyNmE4czizA55C2lAONg==
+  dependencies:
+    "@aptos-labs/aptos-cli" "^1.0.2"
+    "@aptos-labs/aptos-client" "^2.0.0"
+    "@noble/curves" "^1.9.0"
+    "@noble/hashes" "^1.5.0"
+    "@scure/bip32" "^1.4.0"
+    "@scure/bip39" "^1.3.0"
+    eventemitter3 "^5.0.1"
+    form-data "^4.0.4"
+    js-base64 "^3.7.7"
+    jwt-decode "^4.0.0"
+    poseidon-lite "^0.2.0"
+
+"@aptos-labs/wallet-adapter-core@7.4.0":
+  version "7.4.0"
+  resolved "https://registry.yarnpkg.com/@aptos-labs/wallet-adapter-core/-/wallet-adapter-core-7.4.0.tgz#319f336b981178aab481063a1ee9ff388d276c42"
+  integrity sha512-j6uuHyVsWIaKyqost9xp47xFxA179hUQE+7/LMecrc42bBMh1T1wP7PMK4lxJRefvpQ1PnPA4aC3RBee+MSuVg==
+  dependencies:
+    "@aptos-connect/wallet-adapter-plugin" "2.5.2"
+    "@aptos-labs/wallet-standard" "^0.5.2"
+    buffer "^6.0.3"
+    eventemitter3 "^4.0.7"
+    tweetnacl "^1.0.3"
+
+"@aptos-labs/wallet-adapter-react@^7.1.0":
+  version "7.1.0"
+  resolved "https://registry.yarnpkg.com/@aptos-labs/wallet-adapter-react/-/wallet-adapter-react-7.1.0.tgz#ec28883272314493a7c20dda486e9fdba360050b"
+  integrity sha512-RMMzWcv+zOo0JkuIp3sC50TIdW2Qr1e0t4bDlNIZWqsVj92saKBAAB70IKFohNtWcedHzWTqE7wC8AkfBdwSuw==
+  dependencies:
+    "@aptos-labs/wallet-adapter-core" "7.4.0"
+    "@radix-ui/react-slot" "^1.0.2"
+
+"@aptos-labs/wallet-standard@^0.5.0", "@aptos-labs/wallet-standard@^0.5.2":
+  version "0.5.2"
+  resolved "https://registry.yarnpkg.com/@aptos-labs/wallet-standard/-/wallet-standard-0.5.2.tgz#48c52518697dd2715cefc9badc490da5e11514b8"
+  integrity sha512-aFQOMLLRSmEYXHBGzhLGSOICoQRKqrtRyaMR7kDdyKtEI+4Ocgf2QeW+5yNZEUKoeWlydcBZGIuO7xAQpWU7dw==
+
 "@aztec/bb.js@1.0.0-nightly.20250723":
   version "1.0.0-nightly.20250723"
   resolved "https://registry.yarnpkg.com/@aztec/bb.js/-/bb.js-1.0.0-nightly.20250723.tgz#b2b3ab0dff82471d59b2a1519b439f16028dba00"
@@ -1860,6 +1939,39 @@
   resolved "https://registry.yarnpkg.com/@humanwhocodes/retry/-/retry-0.4.3.tgz#c2b9d2e374ee62c586d3adbea87199b1d7a7a6ba"
   integrity sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==
 
+"@identity-connect/api@^0.7.0":
+  version "0.7.0"
+  resolved "https://registry.yarnpkg.com/@identity-connect/api/-/api-0.7.0.tgz#cb0820eb274efd7ffe8c91b8d021f620613ff55f"
+  integrity sha512-mn/LZGeb3xgBD644p67tYOjvYSSdZpwxiO4/ZjwjsJZ8eYvGha5FiZg+pqVH73lg1S36qikwbkA3HUQOAE5GKA==
+
+"@identity-connect/crypto@^0.2.9":
+  version "0.2.9"
+  resolved "https://registry.yarnpkg.com/@identity-connect/crypto/-/crypto-0.2.9.tgz#45bf56f089bc8de3af3bf60b36bb48be7d00fa8e"
+  integrity sha512-LPTCTSVp+L2JoLdYvu/281GqBn/gWjEBsRO3OMlqY3+JGbvhsz7IT9oYDZwvn3+PWddR3djCz/MDdqd3JST8FA==
+  dependencies:
+    "@aptos-connect/wallet-api" "^0.3.2"
+    "@noble/hashes" "^1.3.1"
+    ed2curve "^0.3.0"
+    tweetnacl "^1.0.3"
+
+"@identity-connect/dapp-sdk@^0.11.2":
+  version "0.11.2"
+  resolved "https://registry.yarnpkg.com/@identity-connect/dapp-sdk/-/dapp-sdk-0.11.2.tgz#f9e2092a21cf315f42fa8bdc0f0b8f578150b1d0"
+  integrity sha512-ZA8zeWpMaJMMGkGzzAPDPB4E0vafEbACVjQNV6RVSuDe3k5ALSAXqimZF9L7A6Jajd/Jj+jAEUGk2HOcRGmaCQ==
+  dependencies:
+    "@aptos-connect/wallet-api" "^0.3.2"
+    "@aptos-connect/web-transport" "^0.3.2"
+    "@identity-connect/api" "^0.7.0"
+    "@identity-connect/crypto" "^0.2.9"
+    "@identity-connect/wallet-api" "^0.1.4"
+    axios "^1.9.0"
+    uuid "^9.0.1"
+
+"@identity-connect/wallet-api@^0.1.4":
+  version "0.1.4"
+  resolved "https://registry.yarnpkg.com/@identity-connect/wallet-api/-/wallet-api-0.1.4.tgz#784c143e305061bc8e8dbaa5da3d91a0defe0657"
+  integrity sha512-nXEfUYl1t9mgQu1RRmqH7lcWnsxet5IWtnsno5Vx5jw8PibVZDD5kgy5sZ3k/Brvw8DlhKPIjDwcYNAgcNHhvg==
+
 "@img/sharp-darwin-arm64@0.33.5":
   version "0.33.5"
   resolved "https://registry.yarnpkg.com/@img/sharp-darwin-arm64/-/sharp-darwin-arm64-0.33.5.tgz#ef5b5a07862805f1e8145a377c8ba6e98813ca08"
@@ -2740,7 +2852,7 @@
   dependencies:
     "@noble/hashes" "1.8.0"
 
-"@noble/curves@^1.3.0", "@noble/curves@^1.4.2", "@noble/curves@^1.6.0", "@noble/curves@^1.9.1", "@noble/curves@~1.9.0":
+"@noble/curves@^1.3.0", "@noble/curves@^1.4.2", "@noble/curves@^1.6.0", "@noble/curves@^1.9.0", "@noble/curves@^1.9.1", "@noble/curves@~1.9.0":
   version "1.9.7"
   resolved "https://registry.yarnpkg.com/@noble/curves/-/curves-1.9.7.tgz#79d04b4758a43e4bca2cbdc62e7771352fa6b951"
   integrity sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==
@@ -3257,7 +3369,7 @@
   dependencies:
     "@radix-ui/react-primitive" "2.1.3"
 
-"@radix-ui/react-slot@1.2.3", "@radix-ui/react-slot@^1.2.3":
+"@radix-ui/react-slot@1.2.3", "@radix-ui/react-slot@^1.0.2", "@radix-ui/react-slot@^1.2.3":
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/@radix-ui/react-slot/-/react-slot-1.2.3.tgz#502d6e354fc847d4169c3bc5f189de777f68cfe1"
   integrity sha512-aeNmHnBxbi2St0au6VBVC7JXFlhLlOnvIIlePNniyUNAClzmtAUEY8/pBiK3iHjufOlwA+c20/8jngo7xcrg8A==
@@ -7208,6 +7320,13 @@ eciesjs@^0.4.11:
     "@noble/curves" "^1.9.1"
     "@noble/hashes" "^1.8.0"
 
+ed2curve@^0.3.0:
+  version "0.3.0"
+  resolved "https://registry.yarnpkg.com/ed2curve/-/ed2curve-0.3.0.tgz#322b575152a45305429d546b071823a93129a05d"
+  integrity sha512-8w2fmmq3hv9rCrcI7g9hms2pMunQr1JINfcjwR9tAyZqhtyaMN991lF/ZfHfr5tzZQ8c7y7aBgZbjfbd0fjFwQ==
+  dependencies:
+    tweetnacl "1.x.x"
+
 ee-first@1.1.1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/ee-first/-/ee-first-1.1.1.tgz#590c61156b0ae2f4f0255732a158b266bc56b21d"
@@ -7759,6 +7878,11 @@ eventemitter3@5.0.1, eventemitter3@^5.0.1:
   version "5.0.1"
   resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-5.0.1.tgz#53f5ffd0a492ac800721bb42c66b841de96423c4"
   integrity sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA==
+
+eventemitter3@^4.0.7:
+  version "4.0.7"
+  resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-4.0.7.tgz#2de9b68f6528d5644ef5c59526a1b4a07306169f"
+  integrity sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==
 
 events@3.3.0, events@^3.0.0, events@^3.2.0, events@^3.3.0:
   version "3.3.0"
@@ -9101,6 +9225,11 @@ jsonfile@^4.0.0:
   integrity sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg==
   optionalDependencies:
     graceful-fs "^4.1.6"
+
+jwt-decode@^4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/jwt-decode/-/jwt-decode-4.0.0.tgz#2270352425fd413785b2faf11f6e755c5151bd4b"
+  integrity sha512-+KJGIyHgkGuIq3IEBNftfhW/LfWhXUIY6OmyVWjliu5KH1y0fw7VQ8YndE2O4qZdMSd9SqbnC8GOcZEy0Om7sA==
 
 keccak@^3.0.0, keccak@^3.0.2, keccak@^3.0.3:
   version "3.0.4"
@@ -12272,7 +12401,7 @@ tweetnacl-util@^0.15.1:
   resolved "https://registry.yarnpkg.com/tweetnacl-util/-/tweetnacl-util-0.15.1.tgz#b80fcdb5c97bcc508be18c44a4be50f022eea00b"
   integrity sha512-RKJBIj8lySrShN4w6i/BonWp2Z/uxwC3h4y7xsRrpP59ZboCd0GpEVsOnMDYLMmKBpYhb5TgHzZXy7wTfYFBRw==
 
-tweetnacl@^1.0.3:
+tweetnacl@1.x.x, tweetnacl@^1.0.3:
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/tweetnacl/-/tweetnacl-1.0.3.tgz#ac0af71680458d8a6378d0d0d050ab1407d35596"
   integrity sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==

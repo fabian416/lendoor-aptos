@@ -12,11 +12,25 @@ import { SrApyKPI } from '@/components/kpi/SrAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 import { formatUnits, parseUnits } from 'ethers'
-import { useVault } from '../providers/VaultProvider'
 import { JusdcBalanceKPI } from '../kpi/jUSDCBalance'
 import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
 import { JusdcExchangeRateKPI } from '../kpi/ExchangeRatejUSDC'
 import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
+
+
+// --- Temporary stub while migrating away from EVM VaultProvider ---
+function useVault() {
+  return {
+    evault: null as any,
+    evaultAddress: "",
+    evaultJunior: null as any,
+    evaultJuniorAddress: "",
+    connectedAddress: "",
+    usdc: null as any,
+    controller: null as any,
+  };
+}
+// -----------------------------------------------------------------
 
 type SupplyPanelProps = {
   isLoggedIn: boolean
@@ -48,6 +62,10 @@ export function SupplyPanelSUSDC({
       throw Error('No se pudo instanciar el contrato (evault).')
       return
     }
+    if (!evaultJunior || !evaultJuniorAddress) {
+      throw Error('No se pudo instanciar el contrato (evaultJunior/evaultJuniorAddress).');
+      return;
+    }
 
       setSubmitting(true)
       try {
@@ -69,7 +87,7 @@ export function SupplyPanelSUSDC({
       if (submitting) return;
       let alive = true
       ;(async () => {
-        if (!evault || !connectedAddress) return
+        if (!evaultJunior || !connectedAddress) return
         try {
           // (si tiene decimals, usalo; si no, 18)
           const dec =

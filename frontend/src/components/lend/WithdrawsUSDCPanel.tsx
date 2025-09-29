@@ -15,8 +15,21 @@ import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
 import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
-import { useVault } from '../providers/VaultProvider'
 import { formatUnits, parseUnits } from 'ethers'
+
+// --- Temporary stub while migrating away from EVM VaultProvider ---
+function useVault() {
+  return {
+    evault: null as any,
+    evaultAddress: "",
+    evaultJunior: null as any,
+    evaultJuniorAddress: "",
+    connectedAddress: "",
+    usdc: null as any,
+    controller: null as any,
+  };
+}
+// -----------------------------------------------------------------
 
 type WithdrawPanelProps = {
   isLoggedIn: boolean

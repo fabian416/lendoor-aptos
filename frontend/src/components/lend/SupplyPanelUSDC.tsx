@@ -12,7 +12,17 @@ import { SrApyKPI } from '@/components/kpi/SrAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 import { formatUnits, parseUnits } from 'ethers'
-import { useVault } from '../providers/VaultProvider'
+// --- Temporary stub while migrating away from EVM VaultProvider ---
+function useVault() {
+  return {
+    evault: null as any,
+    evaultAddress: "",
+    connectedAddress: "",
+    usdc: null as any,
+    controller: null as any,
+  };
+}
+// -----------------------------------------------------------------
 import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
 import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
 

@@ -1,12 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import { CreditMarket } from '@/components/borrow/BorrowMarket'
 import { QRCodeView } from '@/components/proofs/QrCode'
 
 export default function BorrowPage() {
-  const { setShowAuthFlow } = useDynamicContext()
   const [showQR, setShowQR] = useState(false)
 
   return (

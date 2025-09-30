@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { ArrowLeft, ShieldCheck, CheckCircle } from 'lucide-react'
-import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import { useUserJourney } from '../providers/UserProvider'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
 
 // zkMe Widget (Compliance Suite)
 import '@zkmelabs/widget/dist/style.css'
@@ -17,12 +17,12 @@ type QRCodeViewProps = {
   onBack: () => void
 }
 
-const APP_ID = process.env.NEXT_PUBLIC_ZKME_APP_ID!          // (= mchNo)
-const PROGRAM_NO = process.env.NEXT_PUBLIC_ZKME_PROGRAM_NO!  // citizenship/personhood habilitado en tu Dashboard
+const APP_ID = import.meta.env.VITE_ZKME_APP_ID as string          // (= mchNo)
+const PROGRAM_NO = import.meta.env.VITE_ZKME_PROGRAM_NO as string  // citizenship/personhood habilitado en tu Dashboard
 const CHAIN_ID = '137'                                       // cross-chain (doc sugiere 137 por defecto)
 
 export function QRCodeView({ onBack }: QRCodeViewProps) {
-  const { primaryWallet, setShowAuthFlow } = useDynamicContext()
+  const { account, connected } = useWallet()
   const { setIsVerified } = useUserJourney()
 
   const [loading, setLoading] = useState(false)
@@ -34,26 +34,15 @@ export function QRCodeView({ onBack }: QRCodeViewProps) {
   const [wallet, setWallet] = useState('') // opcional, para UI
 
   useEffect(() => {
-    let alive = true
-    const w: any = primaryWallet
-    ;(async () => {
-      try {
-        if (!w) { if (alive) { walletRef.current=''; setWallet('') } ; return }
-        let addr: any = w.address ?? w.account?.address ?? null
-        if (!addr && typeof w.address === 'function') addr = w.address()
-        if (addr && typeof addr?.then === 'function') addr = await addr
-        if (!addr && typeof w.getPublicAddress === 'function') {
-          addr = w.getPublicAddress()
-          if (addr && typeof addr?.then === 'function') addr = await addr
-        }
-        const norm = (typeof addr === 'string' ? addr : '').toLowerCase()
-        if (alive) { walletRef.current = norm; setWallet(norm) }
-      } catch {
-        if (alive) { walletRef.current=''; setWallet('') }
-      }
-    })()
-    return () => { alive = false }
-  }, [primaryWallet])
+    const addr = account?.address
+      ? typeof account.address === 'string'
+        ? account.address
+        : (account.address as any)?.toString?.() ?? String(account.address)
+      : ''
+    const norm = (addr || '').toLowerCase()
+    walletRef.current = norm
+    setWallet(norm)
+  }, [account])
 
   // cerrar auto si quedó verificado
   useEffect(() => {
@@ -74,7 +63,10 @@ export function QRCodeView({ onBack }: QRCodeViewProps) {
     },
     async getUserAccounts() {
       if (!walletRef.current) {
-        setShowAuthFlow?.(true)
+        try {
+          // abre el modal global del selector si está implementado
+          window.dispatchEvent(new Event('open-wallet-selector'))
+        } catch {}
         throw new Error('Connect wallet first')
       }
       return [walletRef.current]
@@ -113,7 +105,7 @@ export function QRCodeView({ onBack }: QRCodeViewProps) {
   const startVerification = async () => {
     try {
       setError(null)
-      if (!walletRef.current) { setShowAuthFlow?.(true); return }
+      if (!walletRef.current) { try { window.dispatchEvent(new Event('open-wallet-selector')) } catch {} ; return }
       setLoading(true)
 
       // 1) pre-check: si ya está verificado, no abrimos modal

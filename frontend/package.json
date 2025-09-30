@@ -12,9 +12,6 @@
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.1.0",
     "@aptos-labs/wallet-adapter-react": "^7.1.0",
-    "@dynamic-labs/ethereum": "^4.18.6",
-    "@dynamic-labs/ethers-v6": "^4.19.3",
-    "@dynamic-labs/sdk-react-core": "^4.18.6",
     "@ethereum-attestation-service/eas-sdk": "^2.7.0",
     "@fontsource-variable/inter": "^5.2.6",
     "@fontsource/jetbrains-mono": "^5.2.6",

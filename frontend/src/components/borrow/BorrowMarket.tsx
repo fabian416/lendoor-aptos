@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ChevronDown, ChevronUp, Info } from 'lucide-react'
-import { useIsLoggedIn, useDynamicContext } from '@dynamic-labs/sdk-react-core'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { PullPanel } from '@/components/borrow/PullPanel'
@@ -16,8 +16,19 @@ type Tab = 'Pull' | 'Repay' | 'Stake with Symbiotic'
 
 export function CreditMarket({setShowQR}: any) {
   const [activeTab, setActiveTab] = useState<Tab>('Pull')
-  const isLoggedIn = useIsLoggedIn()
-  const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
+  const { connected, isLoading } = useWallet()
+  const isLoggedIn = connected
+  const loadingNetwork = isLoading
+
+  // Trigger global WalletSelector dialog (handled in WalletSelector via window event listener)
+  const openConnect = () => {
+    try {
+      window.dispatchEvent(new Event('open-wallet-selector'))
+    } catch {
+      // fallback: no-op
+      console.log('open-wallet-selector event not handled')
+    }
+  }
   const { ready, value, is_only_borrow } = useUserJourney();
   
   // TODO: conecta con tus contratos
@@ -60,7 +71,7 @@ export function CreditMarket({setShowQR}: any) {
             <PullPanel
               isLoggedIn={!!isLoggedIn}
               loadingNetwork={loadingNetwork}
-              onConnect={() => setShowAuthFlow(true)}
+              onConnect={openConnect}
               onPull={(amt) => handlePull(amt)}
               setShowQR={setShowQR}
             />
@@ -68,7 +79,7 @@ export function CreditMarket({setShowQR}: any) {
             <RepayPanel
               isLoggedIn={!!isLoggedIn}
               loadingNetwork={loadingNetwork}
-              onConnect={() => setShowAuthFlow(true)}
+              onConnect={openConnect}
               onRepay={(amt) => handleRepay(amt)}
             />
           )}

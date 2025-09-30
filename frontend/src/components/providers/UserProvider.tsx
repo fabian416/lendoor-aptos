@@ -1,3 +1,4 @@
+
 "use client";
 import React, {
   createContext,
@@ -8,7 +9,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import { useIsLoggedIn, useDynamicContext } from "@dynamic-labs/sdk-react-core";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { backendUri } from "@/lib/constants";
 
 /* ===== Allowed steps ===== */
@@ -44,25 +45,25 @@ function isUserJourney(v: unknown): v is UserJourney {
   return typeof v === "string" && (USER_JOURNEYS as readonly string[]).includes(v);
 }
 export function normalizePath(p?: string | null): string {
-  if (!p) return '/';
-  // saca query/hash y el trailing slash (menos en raíz)
-  const cleaned = p.split('?')[0].split('#')[0].replace(/\/+$/, '');
-  return cleaned === '' ? '/' : cleaned;
+  if (!p) return "/";
+  const cleaned = p.split("?")[0].split("#")[0].replace(/\/+$/, "");
+  return cleaned === "" ? "/" : cleaned;
 }
-
 export function inSection(pathname: string | null | undefined, base: string) {
   const p = normalizePath(pathname);
   const b = normalizePath(base);
-  // está exactamente en la sección o debajo de ella
-  return p === b || p.startsWith(b + '/');
+  return p === b || p.startsWith(b + "/");
 }
-const normalizeWallet = (w?: string | null) => (w ?? "").trim().toLowerCase();
+const toAddressString = (addr: unknown) =>
+  typeof addr === "string"
+    ? addr
+    : (addr as any)?.toString?.() ?? (addr ? String(addr) : "");
 
 /* ===== Context ===== */
 type Ctx = {
   value: UserJourney;
   set: (next: UserJourney) => Promise<void>;
-  setIsVerified: any;
+  setIsVerified: React.Dispatch<React.SetStateAction<boolean>>;
   clear: () => Promise<void>;
   refresh: () => Promise<void>;
   ready: boolean;
@@ -80,7 +81,7 @@ const UserJourneyContext = createContext<Ctx | null>(null);
 /* ===== Provider ===== */
 export function UserJourneyProvider({
   children,
-  walletAddress,
+  walletAddress, // opcional: forzar address desde props si querés
 }: {
   children: ReactNode;
   walletAddress?: string | null;
@@ -91,33 +92,31 @@ export function UserJourneyProvider({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
 
-  /* Dynamic Labs */
-  const isLoggedIn = useIsLoggedIn();
-  const { primaryWallet } = useDynamicContext();
-
-  const providedWallet = useMemo(() => normalizeWallet(walletAddress), [walletAddress]);
-  const dynamicWallet = useMemo(
-    () => normalizeWallet((primaryWallet as any)?.address),
-    [primaryWallet],
+  /* Aptos Wallet Adapter */
+  const { connected, account } = useWallet();
+  const addressFromWallet = useMemo(() => toAddressString(account?.address), [account?.address]);
+  const address = useMemo(
+    () => (walletAddress?.trim() ? walletAddress.trim() : addressFromWallet),
+    [walletAddress, addressFromWallet]
   );
-  const wallet = providedWallet || dynamicWallet;
+
+  const isLoggedIn = connected && !!address; // reemplazo de Dynamic: “logueado” = wallet conectada
 
   /* Fetch step and verification status */
   const fetchStep = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      if (!isLoggedIn || !wallet) {
+      if (!isLoggedIn) {
         setValue(DEFAULT_JOURNEY);
         setIsVerified(false);
         return;
       }
-      const res = await fetch(`${backendUri}/user-journey/${wallet}`);
-      if (!res.ok) throw new Error(`GET /user-journey/${wallet} → ${res.status}`);
+      const res = await fetch(`${backendUri}/user-journey/${address}`);
+      if (!res.ok) throw new Error(`GET /user-journey/${address} → ${res.status}`);
       const data: { walletAddress: string; step: unknown; isVerified?: boolean } = await res.json();
-      console.log(isVerified);
       setValue(isUserJourney(data.step) ? data.step : DEFAULT_JOURNEY);
       setIsVerified(Boolean(data.isVerified));
     } catch (e: any) {
@@ -128,19 +127,19 @@ export function UserJourneyProvider({
       setLoading(false);
       setReady(true);
     }
-  }, [isLoggedIn, wallet]);
+  }, [isLoggedIn, address]);
 
   useEffect(() => {
     setReady(false);
     fetchStep();
   }, [fetchStep]);
 
-  /* Update step. If not logged in, keep verify_identity and unverified */
+  /* Update step */
   const set = useCallback(
     async (next: UserJourney) => {
       if (!isUserJourney(next)) return;
 
-      if (!isLoggedIn || !wallet) {
+      if (!isLoggedIn) {
         setValue(DEFAULT_JOURNEY);
         setIsVerified(false);
         setReady(true);
@@ -153,14 +152,12 @@ export function UserJourneyProvider({
         const res = await fetch(`${backendUri}/user-journey`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress: wallet, step: next }),
+          body: JSON.stringify({ walletAddress: address, step: next }),
         });
         if (!res.ok) throw new Error(`PATCH /user-journey → ${res.status}`);
         const data: { step: unknown; isVerified?: boolean } = await res.json();
         setValue(isUserJourney(data.step) ? data.step : DEFAULT_JOURNEY);
-        if (typeof data.isVerified === "boolean") {
-          setIsVerified(data.isVerified);
-        }
+        if (typeof data.isVerified === "boolean") setIsVerified(data.isVerified);
       } catch (e: any) {
         setError(e?.message ?? "Error updating user journey");
       } finally {
@@ -168,7 +165,7 @@ export function UserJourneyProvider({
         setReady(true);
       }
     },
-    [isLoggedIn, wallet],
+    [isLoggedIn, address]
   );
 
   const clear = useCallback(async () => {
@@ -180,18 +177,12 @@ export function UserJourneyProvider({
   }, [fetchStep]);
 
   /* Derived flags */
-  const onBorrowPage = useMemo(() => inSection(pathname, '/borrow'), [pathname]);
-  const onLendPage   = useMemo(() => inSection(pathname, '/lend'),   [pathname]);
+  const onBorrowPage = useMemo(() => inSection(pathname, "/borrow"), [pathname]);
+  const onLendPage = useMemo(() => inSection(pathname, "/lend"), [pathname]);
 
-  const is_borrow = useMemo(
-    () => BORROW_SET.has(value) && !onBorrowPage,
-    [value, onBorrowPage],
-  );
+  const is_borrow = useMemo(() => BORROW_SET.has(value) && !onBorrowPage, [value, onBorrowPage]);
   const is_only_borrow = useMemo(() => ONLY_BORROW_SET.has(value), [value]);
-  const is_lend = useMemo(
-    () => LEND_SET.has(value) && !onLendPage,
-    [value, onLendPage],
-  );
+  const is_lend = useMemo(() => LEND_SET.has(value) && !onLendPage, [value, onLendPage]);
 
   const ctx = useMemo<Ctx>(
     () => ({
@@ -218,12 +209,11 @@ export function UserJourneyProvider({
       loading,
       error,
       isVerified,
-      setIsVerified,
       is_borrow,
       is_only_borrow,
       is_lend,
       pathname,
-    ],
+    ]
   );
 
   return <UserJourneyContext.Provider value={ctx}>{children}</UserJourneyContext.Provider>;

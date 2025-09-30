@@ -4,7 +4,23 @@ import React, { useState } from 'react';
 import { InfoTip } from "../common/InfoTooltip"
 import { useIsLoggedIn } from '@dynamic-labs/sdk-react-core'
 import { Button } from "../ui/button";
-import { useVLayer } from '@/components/providers/VLayerProvider';
+
+
+// --- Temporary stub while migrating away from EVM VLayerProvider ---
+function useVLayer() {
+  return {
+    isReady: false,
+    userAddress: "",
+    // devuelve una forma compatible con el código existente
+    proveAverageBalance: async (_owner?: string) => ({
+      owner: _owner ?? "",
+      avgBalance: 0n, // BigInt para que .toString() funcione
+      proof: {},
+    }),
+  };
+}
+// -----------------------------------------------------------------
+
 
 const ExpandedMenu = ({score}) => {
   const isLoggedIn = useIsLoggedIn();

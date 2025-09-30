@@ -6,21 +6,20 @@ import './index.css'
 import App from './App.jsx'
 
 import 'buffer' 
-import { VLayerProvider } from './components/providers/VLayerProvider.js'
-import { VaultProvider } from './components/providers/VaultProvider.js'
+import { WalletProvider } from '@/components/providers/WalletProvider'
+import { Toaster } from 'sonner';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <WalletProvider>
       <UserJourneyProvider>
-        <VLayerProvider>
-          <VaultProvider>
-            <BrowserRouter>
-              <Suspense fallback={null}>
-                <App />
-              </Suspense>
-            </BrowserRouter>
-            </VaultProvider>
-        </VLayerProvider>
+        <BrowserRouter>
+          <Suspense fallback={null}>
+            <App />
+          </Suspense>
+        </BrowserRouter>
       </UserJourneyProvider>
+      <Toaster richColors position="top-right" />
+    </WalletProvider>
   </StrictMode>
 )

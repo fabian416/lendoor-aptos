@@ -11,7 +11,17 @@ import { CreditScoreKPI } from '../kpi/Score'
 import { BaseApyKPI } from '../kpi/BaseAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
-import { useVault } from '../providers/VaultProvider'
+// --- Temporary stub while migrating away from EVM VaultProvider ---
+function useVault() {
+  return {
+    evault: null as any,
+    evaultAddress: "",
+    connectedAddress: "",
+    usdc: null as any,
+    controller: null as any,
+  };
+}
+// -----------------------------------------------------------------
 import { formatUnits, parseUnits } from 'ethers'
 import ExpandedMenu from './ExpandedMenu'
 

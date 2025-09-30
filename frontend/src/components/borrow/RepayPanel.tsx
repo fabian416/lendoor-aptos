@@ -12,8 +12,19 @@ import { CreditScoreKPI } from '../kpi/Score'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 import ExpandedMenu from './ExpandedMenu'
-import { useVault } from '../providers/VaultProvider'
 import { formatUnits, parseUnits } from 'ethers'
+
+// --- Temporary stub while migrating away from EVM VaultProvider ---
+function useVault() {
+  return {
+    evault: null as any,
+    evaultAddress: "",
+    connectedAddress: "",
+    usdc: null as any,
+    controller: null as any,
+  };
+}
+// -----------------------------------------------------------------
 
 type RepayPanelProps = {
   isLoggedIn: boolean,

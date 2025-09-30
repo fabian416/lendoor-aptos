@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { DynamicWidget, useIsLoggedIn, useDynamicContext } from "@dynamic-labs/sdk-react-core";
-import { Button } from "@/components/ui/button"
-import { Link } from "react-router-dom"
+import { useEffect, useState } from 'react';
+import { WalletSelector } from "@/components/wallet/WalletSelector";
+import { Link } from "react-router-dom";
 import { useUserJourney } from '../providers/UserProvider';
 import UserJourneyBadge from './UserJourneyBadge';
 
@@ -40,7 +39,7 @@ export function Header() {
           </nav>
           <div className="min-w-[200px] w-[200px] shrink-0 flex justify-end">
           {mounted ? (
-            <DynamicWidget />
+            <WalletSelector />
           ) : (
             <div className="h-10 w-full rounded-md border border-primary/20 bg-muted/40 animate-pulse" />
           )}

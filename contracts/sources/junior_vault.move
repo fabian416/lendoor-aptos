@@ -1,37 +1,114 @@
-module lendoor::junior_vault {
+module lendoor::junior {
     use std::signer;
-    use aptos_framework::coin;
+    use std::option::{Self};
+    use std::string;
+    use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
+    
+    use lendoor_config::utils;
+    use lendoor::reserve::{Self as senior, LP};
+    
+    friend lendoor::controller;
 
-    /// Share token del junior (sUSD3)
-    struct S<phantom X> has store, drop, key {}  // X = LP<Coin0>
+    struct S<phantom Coin0> has store, drop, key {}
 
-    /// Recurso global por (X) para contabilizar supply/shares/etc.
-    struct JVault<X> has key {
+    struct JVault<phantom Coin0> has key {
         admin: address,
-        // si quieres, registra ratios/locks/etc.
+        lp_box: Coin<LP<Coin0>>,
+        s_mint: MintCapability<S<Coin0>>,
+        s_burn: BurnCapability<S<Coin0>>,
+        s_freeze: FreezeCapability<S<Coin0>>,
     }
 
-    /// init una vez por activo
-    public entry fun init_for<X>(admin: &signer) { /* move_to JVault<X> y coin::register<S<X>> para @lendoor */ }
+    public entry fun init_for<Coin0>(admin: &signer) {
+        let symbol = string::utf8(b"jUSD");
+        let name = string::utf8(b"Junior USD Shares");
 
-    /// Depositar USD3 (o sea, LP<Coin0]) y recibir sUSD3
-    public entry fun deposit<X>(
-        user: &signer,
-        amount_usd3: u64
-    ) acquires JVault<X> {
-        // transferir USD3 (LP<Coin0>) del usuario a @lendoor (o addr del módulo)
-        // shares sUSD3 = lógica 1:1 al inicio; luego usa el ratio estilo ERC-4626
-        // coin::mint<S<X>>(user_addr, shares)
+        let (burn, freeze, mint) = coin::initialize<S<Coin0>>(
+            admin,
+            name,
+            symbol,
+            coin::decimals<LP<Coin0>>(),
+            true
+        );
+        move_to(admin, JVault<Coin0> {
+            admin: signer::address_of(admin),
+            lp_box: coin::zero<LP<Coin0>>(),
+            s_mint: mint,
+            s_burn: burn,
+            s_freeze: freeze,
+        });
     }
 
-    /// Retirar: quemar sUSD3 y devolver USD3
-    public entry fun withdraw<X>(
-        user: &signer,
-        shares: u64
-    ) acquires JVault<X> {
-        // coin::burn_from<S<X>>(user, shares)
-        // calcular USD3 a devolver y coin::transfer<LP<Coin0>>(user_addr, amount_usd3)
+    public entry fun deposit<Coin0>(user: &signer, amount_lp: u64) acquires JVault {
+        let v = borrow_global_mut<JVault<Coin0>>(signer::address_of(user));
+        let lp_in = coin::withdraw<LP<Coin0>>(user, amount_lp);
+
+        let total_shares_opt = coin::supply<S<Coin0>>();
+        let total_shares: u128 = if (option::is_some(&total_shares_opt)) {
+            *option::borrow(&total_shares_opt)
+        } else { 0 };
+
+        let total_lp: u64 = coin::value(&v.lp_box);
+
+        let shares_to_mint: u64;
+        if (total_shares == 0 || total_lp == 0) {
+            shares_to_mint = amount_lp;
+        } else {
+            shares_to_mint = ((((amount_lp as u128)) * (total_shares)) / (total_lp as u128)) as u64;
+        };
+
+        coin::merge(&mut v.lp_box, lp_in);
+        let s_coins = coin::mint<S<Coin0>>(shares_to_mint, &v.s_mint);
+        utils::deposit_coin<S<Coin0>>(user, s_coins);
     }
 
-    /// (Opcional) locks/cooldowns/whitelists
+
+
+    public entry fun withdraw<Coin0>(user: &signer, shares: u64) acquires JVault {
+        let v = borrow_global_mut<JVault<Coin0>>(signer::address_of(user));
+
+        let s = coin::withdraw<S<Coin0>>(user, shares);
+        utils::burn_coin<S<Coin0>>(s, &v.s_burn);
+
+        let total_shares_opt = coin::supply<S<Coin0>>();
+        let total_shares: u128 = if (option::is_some(&total_shares_opt)) {
+            *option::borrow(&total_shares_opt)
+        } else { 0 };
+
+        let total_lp: u64 = coin::value(&v.lp_box);
+
+        let lp_out: u64;
+        if (total_shares == 0) {
+            lp_out = 0;
+        } else {
+            lp_out = ((((shares as u128)) * (total_lp as u128)) / total_shares) as u64;
+        };
+
+        let lp = coin::extract<LP<Coin0>>(&mut v.lp_box, lp_out);
+        utils::deposit_coin<LP<Coin0>>(user, lp);
+    }
+
+
+    public(friend) fun absorb_loss<Coin0>(admin_addr: address, loss_assets: u64) acquires JVault {
+        let v = borrow_global_mut<JVault<Coin0>>(admin_addr);
+        if (loss_assets == 0) return;
+        let lp_to_burn = senior::get_lp_amount_from_underlying_amount(senior::type_info<Coin0>(), loss_assets);
+        if (lp_to_burn == 0) return;
+        let available = coin::value(&v.lp_box);
+        let burn_lp_amt = if (available >= lp_to_burn) lp_to_burn else available;
+        if (burn_lp_amt == 0) return;
+
+        let lp = coin::extract<LP<Coin0>>(&mut v.lp_box, burn_lp_amt);
+        senior::burn_lp<Coin0>(lp);
+    }
+
+    public(friend) fun pull_and_burn<Coin0>(admin_addr: address, lp_amount: u64): u64 acquires JVault {
+        let v = borrow_global_mut<JVault<Coin0>>(admin_addr);
+        let available = coin::value(&v.lp_box);
+        let burn_lp_amt = if (available >= lp_amount) lp_amount else available;
+        if (burn_lp_amt == 0) return 0;
+        let lp = coin::extract<LP<Coin0>>(&mut v.lp_box, burn_lp_amt);
+        senior::burn_lp<Coin0>(lp);
+        burn_lp_amt
+    }
 }

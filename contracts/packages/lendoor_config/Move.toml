@@ -1,0 +1,15 @@
+[package]
+name = "lendoor_config"
+version = "1.0.0"
+authors = []
+
+[addresses]
+lendoor_config = "_"
+util_types     = "_"
+
+[dependencies]
+util_types     = { local = "../util_types" }
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-framework" }
+AptosStdlib    = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-stdlib" }
+
+[dev-dependencies]

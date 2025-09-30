@@ -9,7 +9,8 @@ module lendoor::profile {
 
     use lendoor::credit_manager;
     use lendoor::reserve::{Self};
-    use decimal::decimal::{Self, Decimal};
+    
+    use util_types::decimal::{Self, Decimal};
     use util_types::iterable_table::{Self as iterable_table, IterableTable};
 
     friend lendoor::controller;

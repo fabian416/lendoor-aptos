@@ -1,21 +1,29 @@
 module lendoor::controller {
     use std::signer;
-    use std::string::Self;
-    use aptos_std::event::{Self};
+    use std::string;
+    use aptos_std::event::{Self}; 
 
-    use aptos_framework::coin::{Self, Coin};
-    use aptos_framework::fungible_asset::{Metadata};
-    use aptos_framework::object::{Object};
+    use aptos_framework::coin;
+    use aptos_framework::coin::Coin; 
+    use aptos_framework::fungible_asset::Metadata;
+    use aptos_framework::object::Object;
 
-    use lendoor::credit_manager;
-    use lendoor::controller_config;
-    use decimal::decimal;
+    use util_types::decimal;
+
     use lendoor_config::interest_rate_config;
-    use lendoor::reserve::{Self, LP};
     use lendoor_config::reserve_config;
-    use lendoor::profile;
-    use lendoor::utils;
+    use lendoor_config::utils;
+
+    use lendoor::controller_config;
+    use lendoor::credit_manager;
     use lendoor::fa_to_coin_wrapper;
+    use lendoor::profile;
+    use lendoor::reserve; 
+    use lendoor::reserve::LP;
+    use lendoor::junior;
+    use lendoor::tranche_manager;
+    use lendoor::tranche_config;
+
 
     //
     // Errors.
@@ -172,6 +180,27 @@ module lendoor::controller {
         emode_id: string::String,
     }
 
+    fun apply_tranche_effects<Coin0>(profit: u64, loss: u64, junior_addr: address, tranche_bps: u16) {
+        if (loss > 0) {
+            let lp_to_burn = reserve::get_lp_amount_from_underlying_amount(reserve::type_info<Coin0>(), loss);
+            if (lp_to_burn > 0) {
+                let burned_lp = junior::pull_and_burn<Coin0>(junior_addr, lp_to_burn);
+                if (burned_lp < lp_to_burn) {
+                    let remaining_lp = lp_to_burn - burned_lp;
+                    let remaining_assets =
+                        reserve::get_underlying_amount_from_lp_amount(reserve::type_info<Coin0>(), remaining_lp);
+                    if (remaining_assets > 0) {
+                        reserve::apply_external_loss_assets<Coin0>(remaining_assets);
+                    };
+                };
+            };
+        };
+
+        if (profit > 0 && tranche_bps > 0) {
+            reserve::mint_tranche_fee_shares<Coin0>(junior_addr, profit, tranche_bps);
+        };
+    }
+
     /// Deployment: we can just use a normal human owned account (will need to make sure that 
     /// this account is only used for deployment) and transfer the authentication key to a 
     /// multisig/another account later on.
@@ -223,6 +252,7 @@ module lendoor::controller {
             reserve_config::default_config(),
             interest_rate_config::default_config()
         );
+        tranche_manager::init_for<Coin0>(admin);
 
         event::emit(AddReserveEvent<Coin0> {
             signer_addr: signer::address_of(admin),
@@ -240,7 +270,8 @@ module lendoor::controller {
             decimal::one(),
             reserve_config::default_test_config(),
             interest_rate_config::default_config()
-        )
+        );
+        tranche_manager::init_for<Coin0>(admin)
     }
 
     /// Register the user and also create a default `Profile` with the given name.
@@ -367,7 +398,6 @@ module lendoor::controller {
         receiver_addr: address,
         repay_only: bool,
     ) {
-        // Calcula cuánto va a repago y cuánto a depósito (según repay_only).
         let (repay_amount, deposit_amount) = profile::deposit(
             receiver_addr,
             reserve::type_info<Coin0>(),
@@ -375,20 +405,18 @@ module lendoor::controller {
             repay_only
         );
 
-        // 1) REPAGO con hook al credit_manager
         if (repay_amount > 0) {
             let repay_coin = coin::withdraw<Coin0>(account, repay_amount);
             let remaining = reserve::repay<Coin0>(repay_coin);
             let actual_repay = repay_amount - coin::value(&remaining);
-            // devuelve el cambio (si lo hubo) al `account`
             utils::deposit_coin<Coin0>(account, remaining);
-            // notifica al credit_manager por el usuario receiver_addr
             if (actual_repay > 0) {
                 credit_manager::on_repay(receiver_addr, reserve::type_info<Coin0>(), actual_repay);
             };
+            let (p, l, j, b) = tranche_manager::sync_and_get<Coin0>();
+            apply_tranche_effects<Coin0>(p, l, j, b);
         };
 
-        // 2) DEPÓSITO → mint LP y añadir a colateral del pool (no afecta "usage")
         if (deposit_amount > 0) {
             let deposit_coin = coin::withdraw<Coin0>(account, deposit_amount);
             let lp = reserve::mint<Coin0>(deposit_coin);
@@ -404,14 +432,6 @@ module lendoor::controller {
             repay_amount: repay_amount,
             deposit_amount: deposit_amount,
         });
-    }
-    /// [Deprecated] use `deposit_and_repay_for` instead
-    public fun deposit_coin_for<Coin0>(
-        addr: address,
-        profile_name: &string::String,
-        coin: Coin<Coin0>,
-    ) {
-        deposit_and_repay_for(addr, profile_name, coin);
     }
 
     public fun deposit_and_repay_for<Coin0>(
@@ -448,6 +468,10 @@ module lendoor::controller {
     ) {
         let repay_remaining_coin = reserve::repay<Coin0>(repay_coin);
         coin::destroy_zero<Coin0>(repay_remaining_coin);
+
+        let (p, l, j, b) = tranche_manager::sync_and_get<Coin0>();
+        apply_tranche_effects<Coin0>(p, l, j, b);
+
         if (coin::value(&deposit_coin) > 0) {
             let lp_coin = reserve::mint<Coin0>(deposit_coin);
             reserve::add_collateral<Coin0>(lp_coin);
@@ -455,6 +479,7 @@ module lendoor::controller {
             coin::destroy_zero(deposit_coin);
         }
     }
+
 
     /// Withdraw fund into the Aries protocol, there are two scenarios:
     ///
@@ -512,7 +537,10 @@ module lendoor::controller {
         coin::merge<Coin0>(&mut borrowed_coin, withdraw_coin);
         borrowed_coin
     }
-
+    
+    /// Admin-only: updates the on-chain **ReserveConfig** for `Coin0`.
+    /// This adjusts LTV, liquidation params, protocol fee ratios, deposit/borrow limits,
+    /// and collateral/redeem permissions. Emits `UpdateReserveConfigEvent<Coin0>`.
     public entry fun update_reserve_config<Coin0>(
         admin: &signer,
         loan_to_value: u8,
@@ -551,11 +579,16 @@ module lendoor::controller {
         });
     }
 
+    /// Admin-only: forces `total_cash_available` in reserve details to match
+    /// the actual on-chain balance in the reserve’s coin store for `Coin0`.
     public entry fun admin_sync_available_cash<Coin0>(admin: &signer) {
         controller_config::assert_is_admin(signer::address_of(admin));
         reserve::sync_cash_available<Coin0>();
     }
 
+    /// Admin-only: updates the **InterestRateConfig** (interest model) for `Coin0`.
+    /// Sets min/optimal/max borrow rates and the optimal utilization kink. Emits
+    /// `UpdateInterestRateConfigEvent<Coin0>`.
     public entry fun update_interest_rate_config<Coin0>(
         admin: &signer,
         min_borrow_rate: u64,
@@ -578,20 +611,61 @@ module lendoor::controller {
         });
     }
 
+    /// Admin-only: withdraws accumulated **borrow fees** for `Coin0` to the admin account.
+    /// After moving the fees, it triggers tranche sync/apply so junior/senior accounting
+    /// reflects any profit realized by the pool.
     public entry fun withdraw_borrow_fee<Coin0>(
         admin: &signer
     ) {
         controller_config::assert_is_admin(signer::address_of(admin));
         let fee_coin = reserve::withdraw_borrow_fee<Coin0>();
         utils::deposit_coin<Coin0>(admin, fee_coin);
+
+        let (p, l, j, b) = tranche_manager::sync_and_get<Coin0>();
+        apply_tranche_effects<Coin0>(p, l, j, b);
     }
 
+    /// Admin-only: withdraws accrued **reserve fees** (protocol reserve) for `Coin0`
+    /// to the admin account. Then runs tranche sync/apply to propagate the effects
+    /// to junior/senior according to the configured split.
     public entry fun withdraw_reserve_fee<Coin0>(
         admin: &signer
     ) {
         controller_config::assert_is_admin(signer::address_of(admin));
         let fee_coin = reserve::withdraw_reserve_fee<Coin0>();
         utils::deposit_coin<Coin0>(admin, fee_coin);
+
+        let (p, l, j, b) = tranche_manager::sync_and_get<Coin0>();
+        apply_tranche_effects<Coin0>(p, l, j, b);
     }
+
+    /// Keeper-only: reports realized **profit** and/or **loss** in underlying assets for `Coin0`.
+    /// Losses are first absorbed by the junior tranche by burning their LP (first-loss).
+    /// Any shortfall beyond junior’s balance is applied as an external asset loss.
+    /// Profits are shared to junior by minting LP according to `tranche_bps`.
+    public entry fun report<Coin0>(keeper: &signer, profit: u64, loss: u64) {
+        controller_config::assert_is_admin(signer::address_of(keeper));
+        let (junior_addr, tranche_bps) = tranche_config::for_coin<Coin0>();
+
+        if (loss > 0) {
+            let lp_to_burn = reserve::get_lp_amount_from_underlying_amount(reserve::type_info<Coin0>(), loss);
+            if (lp_to_burn > 0) {
+                let burned_lp = junior::pull_and_burn<Coin0>(junior_addr, lp_to_burn);
+                if (burned_lp < lp_to_burn) {
+                    let remaining_lp = lp_to_burn - burned_lp;
+                    let remaining_assets =
+                        reserve::get_underlying_amount_from_lp_amount(reserve::type_info<Coin0>(), remaining_lp);
+                    if (remaining_assets > 0) {
+                        reserve::apply_external_loss_assets<Coin0>(remaining_assets);
+                    };
+                };
+            };
+        };
+
+        if (profit > 0 && tranche_bps > 0) {
+            reserve::mint_tranche_fee_shares<Coin0>(junior_addr, profit, tranche_bps);
+        };
+    }
+
 
 }

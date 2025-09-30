@@ -2,6 +2,7 @@ module lendoor::fa_to_coin_wrapper {
     use std::signer;
     use std::string;
     use std::vector;
+    use std::option::{Self};
 
     use aptos_std::math64;
 
@@ -9,7 +10,6 @@ module lendoor::fa_to_coin_wrapper {
     use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
     use aptos_framework::fungible_asset::{Self, Metadata};
     use aptos_framework::object::{Object};
-    use std::option::{Self};
     use aptos_framework::primary_fungible_store;
 
     friend lendoor::controller;

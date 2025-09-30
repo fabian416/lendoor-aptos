@@ -1,6 +1,6 @@
 module util_types::map {
-    use aptos_std::simple_map as sm;               // NOTE: it's aptos_std, not std
-    use std::option::{Self as option, Option};     // Option (uppercase) in types
+    use aptos_std::simple_map as sm;
+    use std::option::{Self as option, Option};
     use std::vector;
 
     // Thin map over SimpleMap, without requiring 'drop' on V (so it accepts Coin<T>, etc).

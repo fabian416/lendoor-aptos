@@ -1,6 +1,6 @@
 //! This modules contains some frequently used math calculation functions for the 
-module lendoor::math_utils {
-    use decimal::decimal::{Self, Decimal};
+module util_types::math_utils {
+    use util_types::decimal::{Self, Decimal};
 
     /// Max `u64` value.
     const U64_MAX: u64 = 18446744073709551615;

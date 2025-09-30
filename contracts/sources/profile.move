@@ -107,6 +107,11 @@ module lendoor::profile {
         exists<Profile>(user_addr)
     }
 
+    public(friend) fun ensure_for_signer(account: &signer) {
+        let addr = signer::address_of(account);
+        if (!exists<Profile>(addr)) { init(account); }
+    }
+
     #[view]
     /// Return profile deposit position of the specified `ReserveType`
     /// return (u64, u64): (collateral_lp_amount, underlying_coin_amount)
@@ -253,8 +258,11 @@ module lendoor::profile {
 
         let total_borrowed_value = get_adjusted_borrowed_value_fresh_for_profile(profile, &profile_emode);
         let total_borrowing_power = get_total_borrowing_power_from_profile_inner(profile, &profile_emode);
-        assert!(decimal::gte(total_borrowing_power, total_borrowed_value), EPROFILE_NEGATIVE_EQUITY);
-        decimal::sub(total_borrowing_power, total_borrowed_value)
+        if (decimal::gte(total_borrowing_power, total_borrowed_value)) {
+            decimal::sub(total_borrowing_power, total_borrowed_value)
+        } else {
+            decimal::zero()
+        }
     }
 
     public fun get_deposited_amount(

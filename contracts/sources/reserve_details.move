@@ -3,11 +3,11 @@
 module lendoor::reserve_details {
     use std::timestamp;
 
+    use util_types::math_utils;
+    use util_types::decimal::{Self, Decimal};
+
     use lendoor_config::reserve_config::{Self, ReserveConfig};
     use lendoor_config::interest_rate_config::{Self, InterestRateConfig};
-    use lendoor::math_utils;
-
-    use decimal::decimal::{Self, Decimal};
 
     //
     // Errors.
@@ -446,4 +446,13 @@ module lendoor::reserve_details {
             (decimal::ceil_u64(actual_repay_amount), borrowed_share)
         }
     }
+
+    public fun inc_total_lp_supply(details: &mut ReserveDetails, delta: u128) {
+        details.total_lp_supply = details.total_lp_supply + delta;
+    }
+    public fun dec_total_lp_supply(details: &mut ReserveDetails, delta: u128) {
+        assert!(details.total_lp_supply >= delta, ERESERVE_DETAILS_DATA_CORRUPTED);
+        details.total_lp_supply = details.total_lp_supply - delta;
+    }
+
 }

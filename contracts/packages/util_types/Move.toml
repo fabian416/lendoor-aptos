@@ -1,0 +1,13 @@
+[package]
+name = "util_types"
+version = "1.0.0"
+authors = []
+
+[addresses]
+util_types = "_"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-framework" }
+AptosStdlib    = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-stdlib" }
+
+[dev-dependencies]

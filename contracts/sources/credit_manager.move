@@ -1,9 +1,11 @@
 module lendoor::credit_manager {
     use std::signer;
     use aptos_std::type_info::{Self as type_info, TypeInfo};
-    use util_types::iterable_table::{Self as itab, IterableTable};
     use aptos_std::simple_map::{Self as ref_map, SimpleMap};
+    
+    use util_types::iterable_table::{Self as itab, IterableTable};
     use lendoor::controller_config;
+
     // Used by profile
     friend lendoor::profile;
     friend lendoor::controller;

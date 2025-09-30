@@ -6,12 +6,12 @@ authors = []
 [addresses]
 lendoor = "_"
 lendoor_config = "_"
-decimal = "_"
 util_types = "_"
-oracle = "_"
-hippo_aggregator = "_"
 
 [dependencies]
+util_types     = { local = "packages/util_types" }
+lendoor_config = { local = "packages/lendoor_config" }
+
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-framework" }
 AptosStdlib   = { git = "https://github.com/aptos-labs/aptos-framework.git", rev = "mainnet", subdir = "aptos-stdlib" }
 

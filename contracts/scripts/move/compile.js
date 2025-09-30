@@ -30,16 +30,10 @@ async function compile() {
   await move.compile({
     packageDirectoryPath: "contracts",
     namedAddresses: {
-        // Publish module to account address
+      // Publish module to account address
       lendoor: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
       lendoor_config: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
-      
-      // si vendorizas terceros bajo tu mismo address, puedes apuntar a tu publisher;
-      // si NO los tienes en tu repo, ver paso 3 (dependencias).
-      decimal: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
       util_types: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
-      oracle: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
-      hippo_aggregator: process.env.VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS,
     },
   });
 }

@@ -1,4 +1,4 @@
-module decimal::decimal {
+module util_types::decimal {
     use aptos_std::math128;
     
     /// Fixed decimal with 1e9 scale (9 decimal places).

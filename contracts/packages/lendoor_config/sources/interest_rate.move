@@ -1,5 +1,5 @@
 module lendoor_config::interest_rate_config {
-    use decimal::decimal::{Self as dec, Decimal};
+    use util_types::decimal::{Self as dec, Decimal};
 
     /// Minimum config for interest curve. Your `reserve_details` can read these fields.
     struct InterestRateConfig has copy, drop, store {

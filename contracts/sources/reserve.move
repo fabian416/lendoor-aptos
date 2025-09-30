@@ -12,17 +12,19 @@ module lendoor::reserve {
     
     use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
 
-    use decimal::decimal::{Self, Decimal};
+    use util_types::decimal::{Self, Decimal};
+    use util_types::math_utils;
+
+    use lendoor_config::reserve_config::{Self, ReserveConfig};
+    use lendoor_config::interest_rate_config::{InterestRateConfig};
+    use lendoor_config::utils;
 
     use lendoor::controller_config;
-    use lendoor_config::interest_rate_config::{InterestRateConfig};
     use lendoor::reserve_details::{Self, ReserveDetails};
-    use lendoor_config::reserve_config::{Self, ReserveConfig};
-    use lendoor::math_utils;
-    use lendoor::utils;
 
     friend lendoor::controller;
     friend lendoor::profile;
+    friend lendoor::junior;
     
     //
     // Errors.
@@ -60,6 +62,9 @@ module lendoor::reserve {
 
     /// When a reserve has no matched liquidity farming entry.
     const ERESERVE_NO_ALLOW_COLLATERAL: u64 = 10;
+
+
+    const ERESERVE_EXTERNAL_LOSS_TOO_BIG: u64 = 11;
 
     /// Represents an LP coin.
     struct LP<phantom Coin> has store { }
@@ -633,15 +638,78 @@ module lendoor::reserve {
         })
     }
 
-    // Specifications
-
-    spec module {
-    }
-
     spec fun spec_reserve_balance<Coin0>(): num {
         let coin_store = global<ReserveCoinContainer<Coin0>>(@lendoor);
         coin::value<Coin0>(coin_store.underlying_coin)
     }
+
+    public(friend) fun mint_tranche_fee_shares<Coin0>(
+        to: address,
+        profit_assets: u64,
+        tranche_bps: u16
+    ) acquires Reserves, ReserveCoinContainer {
+        if (tranche_bps == 0 || profit_assets == 0) { return; };
+
+        let fee_assets_u128 = ((profit_assets as u128) * (tranche_bps as u128)) / 10000;
+        let fee_u64 = if (fee_assets_u128 > (profit_assets as u128)) {
+            profit_assets
+        } else {
+            fee_assets_u128 as u64
+        };
+        if (fee_u64 == 0) { return; };
+
+        let lp_fee = get_lp_amount_from_underlying_amount(type_info<Coin0>(), fee_u64);
+        if (lp_fee == 0) { return; };
+
+        let det = reserve_details(type_info<Coin0>());
+        reserve_details::inc_total_lp_supply(&mut det, (lp_fee as u128));
+        update_reserve_details(type_info<Coin0>(), det);
+
+        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let lp = coin::mint<LP<Coin0>>(lp_fee, &box.mint_capability);
+        utils::deposit_coin_to<LP<Coin0>>(to, lp);
+
+        emit_sync_reserve_detail_event<Coin0>(&reserve_details(type_info<Coin0>()));
+    }
+
+
+
+    public(friend) fun burn_lp<Coin0>(
+        lp: Coin<LP<Coin0>>
+    ) acquires Reserves, ReserveCoinContainer {
+        let amount = coin::value(&lp);
+        if (amount == 0) { coin::destroy_zero(lp); return; };
+
+        let det = reserve_details(type_info<Coin0>());
+        reserve_details::dec_total_lp_supply(&mut det, (amount as u128));
+        update_reserve_details(type_info<Coin0>(), det);
+
+        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        utils::burn_coin<LP<Coin0>>(lp, &box.burn_capability);
+
+        emit_sync_reserve_detail_event<Coin0>(&reserve_details(type_info<Coin0>()));
+    }
+
+    public(friend) fun apply_external_loss_assets<Coin0>(loss: u64)
+        acquires Reserves, ReserveCoinContainer
+    {
+        if (loss == 0) { return; };
+
+        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let avail = coin::value(&box.underlying_coin);
+        assert!(avail >= loss, ERESERVE_EXTERNAL_LOSS_TOO_BIG);
+        let siphoned = coin::extract<Coin0>(&mut box.underlying_coin, loss);
+
+        coin::merge<Coin0>(&mut box.fee, siphoned);
+
+        let det = reserve_details(type_info<Coin0>());
+        let cur = reserve_details::total_cash_available(&det);
+        reserve_details::set_total_cash_available(&mut det, cur - (loss as u128));
+        update_reserve_details(type_info<Coin0>(), det);
+
+        emit_sync_reserve_detail_event<Coin0>(&reserve_details(type_info<Coin0>()));
+    }
+
 
 
 }

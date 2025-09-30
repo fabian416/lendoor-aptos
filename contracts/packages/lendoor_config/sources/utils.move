@@ -1,5 +1,5 @@
 //! Some utility functions to reduce coding efforts
-module lendoor::utils {
+module lendoor_config::utils {
     use std::signer;
     use aptos_std::type_info;
 
@@ -36,5 +36,9 @@ module lendoor::utils {
 
     public fun type_eq<T, U>(): bool {
         type_info::type_of<T>() == type_info::type_of<U>()
+    }
+
+    public fun deposit_coin_to<Coin0>(to: address, coin: Coin<Coin0>) {
+        coin::deposit<Coin0>(to, coin)
     }
 }

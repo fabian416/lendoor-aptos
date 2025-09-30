@@ -8,14 +8,10 @@ import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '@/components/common/CenteredAmountInput'
 import { JrApyKPI } from '@/components/kpi/JrAPY'
 import { BackingTVVKPI } from '@/components/kpi/BackingTVV'
-import { SrApyKPI } from '@/components/kpi/SrAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
 import { formatUnits, parseUnits } from 'ethers'
 import { JusdcBalanceKPI } from '../kpi/jUSDCBalance'
-import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
-import { JusdcExchangeRateKPI } from '../kpi/ExchangeRatejUSDC'
-import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
 
 
 // --- Temporary stub while migrating away from EVM VaultProvider ---

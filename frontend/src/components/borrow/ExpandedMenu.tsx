@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { InfoTip } from "../common/InfoTooltip"
-import { useIsLoggedIn } from '@dynamic-labs/sdk-react-core'
 import { Button } from "../ui/button";
 
 
@@ -23,7 +22,7 @@ function useVLayer() {
 
 
 const ExpandedMenu = ({score}) => {
-  const isLoggedIn = useIsLoggedIn();
+  const isLoggedIn = true;
   const { isReady, userAddress, proveAverageBalance } = useVLayer();
 
   const [loading, setLoading] = useState(false);

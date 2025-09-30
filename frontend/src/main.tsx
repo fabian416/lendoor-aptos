@@ -6,20 +6,23 @@ import './index.css'
 import App from './App.jsx'
 
 import 'buffer' 
-import { WalletProvider } from '@/components/providers/WalletProvider'
+import { WalletProvider } from '@/components/providers/WalletProvider';
+import { MoveModuleProvider } from '@/components/providers/MoveModuleProvider.js'
 import { Toaster } from 'sonner';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <WalletProvider>
-      <UserJourneyProvider>
-        <BrowserRouter>
-          <Suspense fallback={null}>
-            <App />
-          </Suspense>
-        </BrowserRouter>
-      </UserJourneyProvider>
-      <Toaster richColors position="top-right" />
+      <MoveModuleProvider>
+        <UserJourneyProvider>
+          <BrowserRouter>
+            <Suspense fallback={null}>
+              <App />
+            </Suspense>
+          </BrowserRouter>
+        </UserJourneyProvider>
+        <Toaster richColors position="top-right" />
+      </MoveModuleProvider>
     </WalletProvider>
   </StrictMode>
 )

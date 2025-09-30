@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { SupplyPanel } from '@/components/lend/SupplyPanelUSDC'

@@ -10,7 +10,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { backendUri } from "@/lib/constants";
+import { BACKEND_URL } from "@/lib/constants";
 
 /* ===== Allowed steps ===== */
 export const USER_JOURNEYS = [
@@ -114,7 +114,7 @@ export function UserJourneyProvider({
         setIsVerified(false);
         return;
       }
-      const res = await fetch(`${backendUri}/user-journey/${address}`);
+      const res = await fetch(`${BACKEND_URL}/user-journey/${address}`);
       if (!res.ok) throw new Error(`GET /user-journey/${address} → ${res.status}`);
       const data: { walletAddress: string; step: unknown; isVerified?: boolean } = await res.json();
       setValue(isUserJourney(data.step) ? data.step : DEFAULT_JOURNEY);
@@ -149,7 +149,7 @@ export function UserJourneyProvider({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${backendUri}/user-journey`, {
+        const res = await fetch(`${BACKEND_URL}/user-journey`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress: address, step: next }),

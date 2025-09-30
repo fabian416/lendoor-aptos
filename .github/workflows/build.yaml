@@ -1,7 +1,7 @@
 name: Build & Deploy
 env:
-  IMAGE_TAG_BACKEND: ghcr.io/lucholeonel/lendoor/backend
-  IMAGE_TAG_FRONTEND: ghcr.io/lucholeonel/lendoor/frontend
+  IMAGE_TAG_BACKEND: ghcr.io/fabian416/lendoor-aptos/backend
+  IMAGE_TAG_FRONTEND: ghcr.io/fabian416/lendoor-aptos/frontend
 
   IMAGE_VERSION: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
   NEXT_PUBLIC_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}

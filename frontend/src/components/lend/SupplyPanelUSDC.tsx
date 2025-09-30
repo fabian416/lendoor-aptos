@@ -6,32 +6,40 @@ import { Card } from '@/components/ui/card'
 import { ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '@/components/common/CenteredAmountInput'
-import { JrApyKPI } from '@/components/kpi/JrAPY'
 import { BackingTVVKPI } from '@/components/kpi/BackingTVV'
 import { SrApyKPI } from '@/components/kpi/SrAPY'
 import UserJourneyBadge from '../common/UserJourneyBadge'
 import { useUserJourney } from '../providers/UserProvider'
-import { formatUnits, parseUnits } from 'ethers'
-// --- Temporary stub while migrating away from EVM VaultProvider ---
-function useVault() {
-  return {
-    evault: null as any,
-    evaultAddress: "",
-    connectedAddress: "",
-    usdc: null as any,
-    controller: null as any,
-  };
-}
-// -----------------------------------------------------------------
-import { ExchangeRateKPI } from '../kpi/ExchangeRatesUSDC'
 import { SusdcBalanceKPI } from '../kpi/sUSDCBalance'
+import { useMoveModule } from '@/components/providers/MoveModuleProvider'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
+import { LENDOOR_CONTRACT } from '@/lib/constants' // <-- package addr to build fully-qualified names
+
+// Coin type & decimals (UI)
+const USDC_TYPE = (import.meta.env.VITE_USDC_TYPE as string) || '0x1::aptos_coin::AptosCoin'
+const USDC_DECIMALS = Number(import.meta.env.VITE_USDC_DECIMALS ?? 6)
+
+// Simple unit helpers for Aptos (u64-compatible)
+function parseUnitsAptos(amountStr: string, decimals: number): bigint {
+  const [int, frac = ""] = amountStr.split(".");
+  const base = (10n ** BigInt(decimals));
+  const cleanFrac = (frac + "0".repeat(decimals)).slice(0, decimals);
+  return (BigInt(int || "0") * base) + BigInt(cleanFrac || "0");
+}
+function formatUnitsAptos(v: bigint | string, decimals: number): string {
+  const n = BigInt(typeof v === "string" ? v : v)
+  const base = BigInt(10 ** decimals)
+  const i = n / base
+  const f = (n % base).toString().padStart(decimals, "0").replace(/0+$/, "")
+  return f.length ? `${i}.${f}` : i.toString()
+}
 
 type SupplyPanelProps = {
   isLoggedIn: boolean
   loadingNetwork: boolean
   onConnect: () => void
   onSupply: (amount: string) => void
-  supplyCapLabel?: string // ej: "SUPPLY CAP $10.000"
+  supplyCapLabel?: string
 }
 
 export function SupplyPanel({
@@ -43,69 +51,101 @@ export function SupplyPanel({
 }: SupplyPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
-  const { ready, value } = useUserJourney();
-  const [submitting, setSubmitting] = useState(false);
-  const [balance, setBalance] = useState("0");
-  const { evault, usdc, evaultAddress, connectedAddress } = useVault();
+  const { ready, value } = useUserJourney()
+  const [submitting, setSubmitting] = useState(false)
+  const [balance, setBalance] = useState("0")
 
+  const { account } = useWallet()
+  const connectedAddress = account?.address
+  const { callView, entry } = useMoveModule()
+
+  // --- Helpers for fully-qualified view/entry calls ---
+  // We build the function string as `${addr}::module::fn` to match the Aptos SDK template type.
+  const fq = (moduleName: string, fn: string) =>
+    `${LENDOOR_CONTRACT}::${moduleName}::${fn}`
+
+  // Submit deposit:
+  // NOTE (English): On Aptos there is no ERC-20 approve. You call the Move entry function directly.
+  // We must:
+  //  1) ensure the user is registered (controller::register_user) once,
+  //  2) call controller::deposit<Coin>(profile_name: vector<u8>, amount: u64, repay_only: bool)
   const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!isLoggedIn) return onConnect()
-    if (!amount) return
-    if (!evault) {
-      throw Error('No se pudo instanciar el contrato (evault).')
-      return
-    }
+    e.preventDefault();
+    if (!isLoggedIn) return onConnect();
+    if (!amount || !connectedAddress) return;
 
-    setSubmitting(true)
+    setSubmitting(true);
     try {
-      const amountBN = parseUnits(amount, 4)
-      console.log(amountBN);
-      console.log(evaultAddress);
-      
-      const tx = await usdc!.approve(evaultAddress, amountBN)
-      await tx.wait()
+      // 1) If user isn't registered, register with a default profile name (e.g. "main")
+      const [isReg] = await callView<[boolean]>(
+        fq('profile', 'is_registered'),
+        [],
+        [connectedAddress]
+      );
+      if (!isReg) {
+        const profileName = new TextEncoder().encode('main'); // vector<u8>
+        await entry(
+          fq('controller', 'register_user'),
+          [],
+          [profileName]
+        );
+      }
 
-      const tx2 = await evault.deposit(amountBN, connectedAddress)
-      await tx2.wait()
+      // 2) Deposit to the user's default profile ("main")
+      const amountU64 = parseUnitsAptos(amount, USDC_DECIMALS);
+      const profileName = new TextEncoder().encode('main'); // vector<u8>
+
+      await entry(
+        fq('controller', 'deposit'),
+        [USDC_TYPE],
+        [
+          profileName,               // vector<u8> profile_name
+          amountU64.toString(),      // u64 amount
+          false                      // bool repay_only
+        ],
+        { checkSuccess: true }
+      );
+
+      onSupply(amount);
+      await refreshBalance();
     } catch (err) {
-      console.error(err);
+      console.error("deposit error:", err);
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
+    }
+  };
+
+  // Read deposited balance (underlying):
+  // NOTE (English): There is no `balance_of` in your contracts.
+  // Use the view profile::profile_deposit<Coin>(user) -> (collateral_lp_amount, underlying_amount).
+  const refreshBalance = async () => {
+    if (!connectedAddress) return
+    try {
+      const [lp, underlying] = await callView<[string, string]>(
+        fq('profile', 'profile_deposit'),
+        [USDC_TYPE],
+        [connectedAddress]
+      );
+      // `underlying` is u64 as string (Move view returns), so we format to decimals
+      const next = formatUnitsAptos(BigInt(underlying), USDC_DECIMALS)
+      setBalance(prev => (prev === next ? prev : next))
+    } catch (e) {
+      console.error('read profile_deposit:', e)
     }
   }
 
-   useEffect(() => {
-    if (submitting) return;
-    let alive = true
-    ;(async () => {
-      if (!evault || !connectedAddress) return
-      try {
-        // (si tiene decimals, usalo; si no, 18)
-        const dec =
-          typeof (evault as any).decimals === 'function'
-            ? Number(await (evault as any).decimals())
-            : 18
-
-        const bal: bigint = await (evault as any).balanceOf(connectedAddress)
-        const next = formatUnits(bal, dec)
-        // Evitar re-render si no cambió
-        setBalance(prev => (prev === next ? prev : next))
-      } catch (e) {
-        console.error('read balanceOf:', e)
-      }
-    })()
-    return () => {
-      alive = false
-    }
-    // 🔑 dependé del address estable y del usuario, NO del objeto contrato
-  }, [evaultAddress, connectedAddress, submitting])
+  // Refresh on connect and after submit
+  useEffect(() => {
+    if (!connectedAddress) return
+    refreshBalance()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Supply Liquidity'
 
   return (
     <>
-      {/* KPIs específicos de Lend */}
+      {/* Lend KPIs */}
       <div className="grid grid-cols-4 gap-2 w-full mx-auto">
         <SrApyKPI value="10%" />
         <BackingTVVKPI value="10.4M" />
@@ -118,23 +158,25 @@ export function SupplyPanel({
         </div>
 
         <form onSubmit={submit} className="w-full">
-            <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢'/>
-            <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
-            {supplyCapLabel}
-            </div>
+          {/* Amount input */}
+          <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' />
 
-            {/* botón full width */}
-            <Button
+          <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
+            {supplyCapLabel}
+          </div>
+
+          {/* Primary action */}
+          <Button
             type="submit"
             disabled={!amount || submitting}
             className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
-            >
+          >
             {ready && (value === "supply_liquidity") && <UserJourneyBadge/>}
             {cta}
-            </Button>
+          </Button>
         </form>
 
-
+        {/* Gas/Cost row (placeholder) */}
         <div className="space-y-2 mb-4">
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">
@@ -144,7 +186,7 @@ export function SupplyPanel({
           </div>
         </div>
 
-        {/* Collapsible Info */}
+        {/* Collapsible info */}
         <div className="border-top border-border pt-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}

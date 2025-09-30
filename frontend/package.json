@@ -31,6 +31,7 @@
     "@telegram-apps/bridge": "^2.11.0",
     "@vitejs/plugin-react": "^4.5.2",
     "@vlayer/sdk": "^1.0.2-nightly-20250530-3f01bfdcfb6b20d608f7bcef25f9907164ad3966",
+    "@wallet-standard/core": "^1.1.1",
     "@zkmelabs/widget": "^0.3.6",
     "@zkpassport/sdk": "0.8.2",
     "aptos": "^1.21.0",

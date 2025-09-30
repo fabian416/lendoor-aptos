@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { WalletSelector } from "@/components/wallet/WalletSelector";
 import { Link } from "react-router-dom";
-import { useUserJourney } from '../providers/UserProvider';
-import UserJourneyBadge from './UserJourneyBadge';
+import { useUserJourney } from '@/providers/UserProvider';
+import UserJourneyBadge from '@/components/common/UserJourneyBadge';
 
 export function Header() {
   const [mounted, setMounted] = useState(false)

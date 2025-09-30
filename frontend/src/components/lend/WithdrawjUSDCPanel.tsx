@@ -3,141 +3,147 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ChevronDown, ChevronUp, Info } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '@/components/common/CenteredAmountInput'
-import { AvailableToWithdrawKPI } from '../kpi/AvailableToWithdraw'
-import { JusdcBalanceKPI } from '../kpi/jUSDCBalance'
-import { JusdcExchangeRateKPI } from '../kpi/ExchangeRatejUSDC'
-import UserJourneyBadge from '../common/UserJourneyBadge'
-import { useUserJourney } from '../providers/UserProvider'
-import { formatUnits, parseUnits } from 'ethers'
+import { AvailableToWithdrawKPI } from '@/components/kpi/AvailableToWithdraw'
+import { JusdcBalanceKPI } from '@/components/kpi/jUSDCBalance'
+import { JusdcExchangeRateKPI } from '@/components/kpi/ExchangeRatejUSDC'
+import UserJourneyBadge from '@/components/common/UserJourneyBadge'
+import { useUserJourney } from '@/providers/UserProvider'
+import { useMoveModule } from '@/providers/MoveModuleProvider'
+import { USDC_TYPE, USDC_DECIMALS } from '@/lib/constants'
+import { parseUnitsAptos, formatUnitsAptos, fq } from '@/lib/utils'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
 
-// --- Temporary stub while migrating away from EVM VaultProvider ---
-function useVault() {
-  return {
-    evault: null as any,
-    evaultAddress: "",
-    evaultJunior: null as any,
-    evaultJuniorAddress: "",
-    connectedAddress: "",
-    usdc: null as any,
-    controller: null as any,
-  };
-}
-// -----------------------------------------------------------------
 
 type WithdrawPanelProps = {
   isLoggedIn: boolean
   loadingNetwork: boolean
   onConnect: () => void
-  onWithdraw: (amount: string) => void
-  availableLabel?: string // ej: "AVAILABLE: $0"
+  availableLabel?: string // e.g., "AVAILABLE: $"
 }
 
 export function WithdrawjUSDCPanel({
   isLoggedIn,
   loadingNetwork,
   onConnect,
-  onWithdraw,
   availableLabel = 'AVAILABLE: $',
 }: WithdrawPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
-  const { ready, value } = useUserJourney();
-  const [balance, setBalance] = useState("0");
-  const [submitting, setSubmitting] = useState(false);
-    const { evault, evaultAddress, evaultJunior, evaultJuniorAddress, connectedAddress } = useVault();
+  const { ready, value } = useUserJourney()
+  const [balance, setBalance] = useState('0')       // jUSDC balance (shares)
+  const [submitting, setSubmitting] = useState(false)
 
+  const { account } = useWallet()
+  const connectedAddress = account?.address
+  const { callView, entry } = useMoveModule()
+
+  // Withdraw jUSDC (shares) -> get LP -> redeem to USDC
   const submit = async (e: React.FormEvent) => {
-      e.preventDefault()
-      if (!isLoggedIn) return onConnect()
-      if (!amount) return
-      if (!evault) {
-        throw Error('No se pudo instanciar el contrato (evault).')
-        return
-      }
-      if (!evaultJunior || !evaultJuniorAddress) {
-        throw Error('No se pudo instanciar el contrato (evaultJunior/evaultJuniorAddress).');
-        return;
-      }
-  
-      setSubmitting(true)
-      try {
-        const assets = parseUnits(amount, 4)
-        console.log(assets);
-        const tx2 = await evaultJunior!.demoteToSenior(assets, connectedAddress);
-        await tx2.wait();
-        await (await evaultJunior!.withdraw(assets, connectedAddress, connectedAddress)).wait()
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setSubmitting(false)
-      }
-    }
+    e.preventDefault()
+    if (!isLoggedIn) return onConnect()
+    if (!amount || !connectedAddress) return
 
-    useEffect(() => {
-    if (submitting) return;
-    let alive = true
-    ;(async () => {
-      if (!evaultJunior || !connectedAddress) return
-      try {
-        // (si tiene decimals, usalo; si no, 18)
-        const dec =
-          typeof (evault as any).decimals === 'function'
-            ? Number(await (evault as any).decimals())
-            : 18
+    setSubmitting(true)
+    try {
+      // Interpret input as jUSDC shares (same decimals as underlying/LP)
+      const sharesU64 = parseUnitsAptos(amount, USDC_DECIMALS)
 
-        const bal: bigint = await (evaultJunior as any).balanceOf(connectedAddress)
-        const next = formatUnits(bal, dec)
-        // Evitar re-render si no cambió
-        setBalance(prev => (prev === next ? prev : next))
-      } catch (e) {
-        console.error('read balanceOf:', e)
+      // 1) Burn jUSDC -> receive LP back to user's wallet
+      await entry(
+        fq('junior', 'withdraw'),
+        [USDC_TYPE],
+        [sharesU64.toString()],
+        { checkSuccess: true }
+      )
+
+      // 2) Check how many LP we now hold and redeem them to underlying USDC
+      const [lpNowStr] = await callView<[string]>(
+        fq('reserve', 'lp_balance'),     // #[view] helper you added
+        [USDC_TYPE],
+        [connectedAddress]
+      )
+      if (BigInt(lpNowStr) > 0n) {
+        await entry(
+          fq('controller', 'redeem'),
+          [USDC_TYPE],
+          [lpNowStr],
+          { checkSuccess: true }
+        )
       }
-    })()
-    return () => {
-      alive = false
+
+      await refreshJBalance()
+    } catch (err) {
+      console.error('withdraw jUSDC error:', err)
+    } finally {
+      setSubmitting(false)
     }
-    // 🔑 dependé del address estable y del usuario, NO del objeto contrato
-  }, [evaultAddress, connectedAddress, submitting])
+  }
+
+  // Read jUSDC balance via helper view
+  const refreshJBalance = async () => {
+    if (!connectedAddress) return
+    try {
+      const [rawStr] = await callView<[string]>(
+        fq('reserve', 'junior_balance'), // #[view] helper you added
+        [USDC_TYPE],
+        [connectedAddress]
+      )
+      const next = formatUnitsAptos(BigInt(rawStr), USDC_DECIMALS)
+      setBalance(prev => (prev === next ? prev : next))
+    } catch (e) {
+      console.error('read junior_balance:', e)
+    }
+  }
+
+  // Optionally compute "available to withdraw" in USDC here if you later expose a view
+  // that returns a jUSDC -> underlying quote. For now, keep a placeholder or map it to shares.
+  const availableToWithdraw = '-' // replace with a computed value when you add a quote view
+
+  useEffect(() => {
+    if (!connectedAddress) return
+    refreshJBalance()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Withdraw Liquidity'
-  let availableToWithdraw = 20;
+
   return (
     <>
-      {/* KPIs (mismos que Supply; podés cambiarlos si necesitás) */}
+      {/* KPIs */}
       <div className="grid grid-cols-4 gap-2 w-full mx-auto">
         <JusdcBalanceKPI value={balance} />
         <AvailableToWithdrawKPI value={`${availableToWithdraw} USDC`} />
-        <JusdcExchangeRateKPI value="1.107%" />
+        <JusdcExchangeRateKPI value="—" />
       </div>
 
       <Card className="p-4 border-2 border-border/50">
         <div className="flex items-center justify-between mb-4">
-          <span className="text-xs text-muted-foreground font-mono">MANAGE LIQUIDITY</span>
+          <span className="text-xs text-muted-foreground font-mono">MANAGE LIQUIDITY (Junior)</span>
         </div>
 
         <form onSubmit={submit} className="w-full">
-            <CenteredAmountInput value={amount} onChange={setAmount} symbol="¢" />
-            <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
+          <CenteredAmountInput value={amount} onChange={setAmount} symbol="¢" />
+          <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
             {availableLabel}{availableToWithdraw}
-            </div>
+          </div>
 
-            {/* botón full width */}
-            <Button
+          <Button
             type="submit"
+            disabled={!amount || submitting}
             className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
-            >
-            {ready && (value === "withdraw_jusdc") && <UserJourneyBadge/>}
+          >
+            {ready && (value === 'withdraw_jusdc') && <UserJourneyBadge />}
             {cta}
-            </Button>
+          </Button>
         </form>
 
         <div className="space-y-2 mb-4">
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">
-              TX Cost <InfoTip label="Estimated gas for withdrawing." variant="light" />
+              TX Cost <InfoTip label="Estimated gas for jUSDC withdraw (junior withdraw + LP redeem)." variant="light" />
             </span>
             <span className="text-xs">-</span>
           </div>
@@ -161,7 +167,7 @@ export function WithdrawjUSDCPanel({
           {isExpanded && (
             <div className="mt-3 space-y-3">
               <div className="text-xs text-muted-foreground">
-                Real-time liquidity depends on market reserves; some tranches (ej. jUSDC) pueden tener cooldown.
+                Real-time liquidity depends on reserve cash; junior shares burn to LP, then LP redeem to USDC.
               </div>
             </div>
           )}

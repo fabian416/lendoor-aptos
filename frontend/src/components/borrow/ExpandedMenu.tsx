@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
-import { InfoTip } from "../common/InfoTooltip"
-import { Button } from "../ui/button";
+import { useState } from 'react';
+import { InfoTip } from "@/components/common/InfoTooltip"
+import { Button } from "@/components/ui/button";
 
 
 // --- Temporary stub while migrating away from EVM VLayerProvider ---

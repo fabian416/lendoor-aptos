@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { SupplyPanel } from '@/components/lend/SupplyPanelUSDC'
-import { SupplyPanelSUSDC } from './SupplyPanelSUDC'
+import { SupplyPanelSUSDC } from '@/components/lend/SupplyPaneljUSDC'
 import { WithdrawsUSDCPanel } from '@/components/lend/WithdrawsUSDCPanel'
-import { WithdrawjUSDCPanel } from './WithdrawjUSDCPanel'
-import UserJourneyBadge from '../common/UserJourneyBadge'
-import { useUserJourney } from '../providers/UserProvider'
+import { WithdrawjUSDCPanel } from '@/components/lend/WithdrawjUSDCPanel'
+import UserJourneyBadge from '@/components/common/UserJourneyBadge'
+import { useUserJourney } from '@/providers/UserProvider'
 
 type Tab = 'Supply USDC' | 'Supply sUSDC' | 'Withdraw sUSDC' | 'Withdraw jUSDC'
 
@@ -23,10 +23,6 @@ export function LendMarket() {
     console.log('Open wallet selector');
   };
   const { ready, value } = useUserJourney();
-
-  // TODO: conectá con tus contracts
-  const handleSupply = (amt: string) => console.log('Supply amount:', amt)
-  const handleWithdraw = (amt: string) => console.log('Withdraw amount:', amt)
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -62,28 +58,24 @@ export function LendMarket() {
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}
-            onSupply={handleSupply}
           />
         ) : activeTab === 'Supply sUSDC' ? (
           <SupplyPanelSUSDC
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}
-            onSupply={handleSupply}
           />
         ) : activeTab === 'Withdraw sUSDC' ? (
           <WithdrawsUSDCPanel
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}
-            onWithdraw={handleWithdraw}
           />
         ) :
           <WithdrawjUSDCPanel
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}
-            onWithdraw={handleWithdraw}
           />
       }
       </div>

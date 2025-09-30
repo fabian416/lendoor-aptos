@@ -1,5 +1,5 @@
 import { Network } from "@aptos-labs/ts-sdk";
-import { FQName, toFQName } from "@/types/aptos";
+import { FQName } from "@/types/aptos";
 
 export const BACKEND_URL =
   (import.meta.env.VITE_PUBLIC_BACKEND_URL as string) ?? "http://localhost:5001";

@@ -1,13 +1,13 @@
 import { StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { UserJourneyProvider } from '@/components/providers/UserProvider'
+import { UserJourneyProvider } from '@/providers/UserProvider.js'
 import './index.css'
 import App from './App.jsx'
 
 import 'buffer' 
-import { WalletProvider } from '@/components/providers/WalletProvider';
-import { MoveModuleProvider } from '@/components/providers/MoveModuleProvider.js'
+import { WalletProvider } from '@/providers/WalletProvider.js';
+import { MoveModuleProvider } from '@/providers/MoveModuleProvider.js'
 import { Toaster } from 'sonner';
 
 createRoot(document.getElementById('root')!).render(

@@ -2,7 +2,7 @@
 import { PropsWithChildren, createContext, useContext, useMemo, useCallback, useEffect } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { MoveValue, EntryFunctionArgumentTypes, SimpleEntryFunctionArgumentTypes } from "@aptos-labs/ts-sdk";
-import { useAptos } from "@/components/providers/WalletProvider";
+import { useAptos } from "@/providers/WalletProvider";
 import { LENDOOR_CONTRACT, LENDOOR_MODULE } from "@/lib/constants";
 import { FQName, toFQName } from "@/types/aptos";
 

@@ -224,8 +224,9 @@ module lendoor::controller {
         profile_name: vector<u8>,
         amount: u64,
     ) {
+        profile::ensure_for_signer(account); // ← lazy init (friend call)
         let coin = fa_to_coin_wrapper::fa_to_coin<WCoin>(account, amount);
-        deposit_and_repay_for(signer::address_of(account), &string::utf8(profile_name), coin);
+        deposit_and_repay_for<WCoin>(signer::address_of(account), &string::utf8(profile_name), coin);
     }
 
     /// Need to have a corresponding Wrapped Coin.
@@ -385,6 +386,8 @@ module lendoor::controller {
         repay_only: bool,
     ) {
         assert!(amount > 0, ECONTROLLER_DEPOSIT_ZERO_AMOUNT);
+        // Lazy init (solo el dueño puede crear su Profile)
+        profile::ensure_for_signer(account);
         let addr = signer::address_of(account);
         deposit_for<Coin0>(account, profile_name, amount, addr, repay_only);
     }

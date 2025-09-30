@@ -15,7 +15,7 @@ import {
   useWallet,
 } from "@aptos-labs/wallet-adapter-react";
 import { ArrowLeft, ArrowRight, ChevronDown, Copy, LogOut, User } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,14 +25,34 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 export function WalletSelector(walletSortingOptions: WalletSortingOptions) {
   const { account, connected, disconnect, wallet } = useWallet();
+
+  function addrToString(a: unknown) {
+    if (!a) return "";
+    if (typeof a === "string") return a;
+    const s = (a as any)?.toString?.();
+    return typeof s === "string" ? s : "";
+  }
+
+  const addr = addrToString(account?.address);
+  const label = account?.ansName ?? (addr ? truncateAddress(addr) : "Connect Wallet");
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Allow opening this dialog from anywhere (e.g., panels) via a global event
+  // `window.dispatchEvent(new Event('open-wallet-selector'))`
+  useEffect(() => {
+    const h = () => setIsDialogOpen(true);
+    window.addEventListener("open-wallet-selector", h);
+    return () => window.removeEventListener("open-wallet-selector", h);
+  }, []);
 
   const closeDialog = useCallback(() => setIsDialogOpen(false), []);
 
   const copyAddress = useCallback(async () => {
-    if (!account?.address) return;
+    const safe = addrToString(account?.address);
+    if (!safe) return;
     try {
-      await navigator.clipboard.writeText(account.address.toString());
+      await navigator.clipboard.writeText(safe);
       toast.success("Copied wallet address");
     } catch {
       toast.error("Failed to copy wallet address");
@@ -43,7 +63,7 @@ export function WalletSelector(walletSortingOptions: WalletSortingOptions) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="cursor-pointer">
-          {account?.ansName || truncateAddress(account?.address?.toString()) || "Unknown"}
+          {label}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

@@ -2,9 +2,8 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ZKPassport } from '@zkpassport/sdk';               // 👈 SDK backend
 import { User } from '../entities/user.entity';
-import { SubmitZkPassportDto } from './dto/submit-zk-passport.dto';
+import { SubmitZkMeDto } from './dto/submit-zk-me.dto';
 import { giveCreditScoreAndLimit } from 'src/config/contractConfig';
 
 type MappedPassport = Partial<
@@ -13,11 +12,11 @@ type MappedPassport = Partial<
 
 const DEFAULT_SCORE = 50;
 const DEFAULT_CREDIT_LIMIT_USDC = 15;
-const DEFAULT_STEP: User['userJourneyStep'] = 'verify_identity';
+const DEFAULT_STEP: User['userJourneyStep'] = 'supply_liquidity';
 
 @Injectable()
-export class ZkPassportService {
-  private readonly logger = new Logger(ZkPassportService.name);
+export class ZkMeService {
+  private readonly logger = new Logger(ZkMeService.name);
 
   constructor(@InjectRepository(User) private readonly userRepo: Repository<User>) {}
 
@@ -61,7 +60,7 @@ export class ZkPassportService {
     return req.every(v => !!(v && String(v).trim().length > 0));
   }
 
-  async submitAndVerify(dto: SubmitZkPassportDto) {
+  async submitAndVerify(dto: SubmitZkMeDto) {
     const wallet = this.normalizeWallet(dto.walletAddress);
     /*
     const { proofs, queryResult } = dto.verification || {};

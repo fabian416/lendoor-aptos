@@ -9,20 +9,24 @@ import { WithdrawsUSDCPanel } from '@/components/lend/WithdrawsUSDCPanel'
 import { WithdrawjUSDCPanel } from '@/components/lend/WithdrawjUSDCPanel'
 import UserJourneyBadge from '@/components/common/UserJourneyBadge'
 import { useUserJourney } from '@/providers/UserProvider'
+import { toast } from 'sonner';
 
 type Tab = 'Supply USDC' | 'Supply sUSDC' | 'Withdraw sUSDC' | 'Withdraw jUSDC'
 
 export function LendMarket() {
   const [activeTab, setActiveTab] = useState<Tab>('Supply USDC')
-  const { connected, isLoading } = useWallet();
-  const isLoggedIn = connected;
-  const loadingNetwork = isLoading;
-  const openConnect = () => {
-    // Aquí podrías disparar tu modal de WalletSelector si expones un trigger global.
-    // Por ahora, dejamos un log no intrusivo.
-    console.log('Open wallet selector');
-  };
+  const { connected: isLoggedIn, isLoading: loadingNetwork } = useWallet();
   const { ready, value } = useUserJourney();
+
+  // Trigger global WalletSelector dialog (handled in WalletSelector via window event listener)
+  const openConnect = () => {
+    try {
+      window.dispatchEvent(new Event('open-wallet-selector'))
+    } catch {
+      toast.error('Could not open the wallet selector. Please try again.');
+    }
+  }
+  
 
   return (
     <TooltipProvider delayDuration={150}>

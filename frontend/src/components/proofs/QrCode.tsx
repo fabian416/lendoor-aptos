@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { ArrowLeft, ShieldCheck, CheckCircle } from 'lucide-react'
-import { useUserJourney } from '../../providers/UserProvider'
+import { useUserJourney } from '@/providers/UserProvider'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
 
 // zkMe Widget (Compliance Suite)

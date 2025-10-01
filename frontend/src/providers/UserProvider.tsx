@@ -11,17 +11,17 @@ import React, {
 } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { BACKEND_URL } from "@/lib/constants";
+import { useLocation } from "react-router-dom";
+
 
 /* ===== Allowed steps ===== */
 export const USER_JOURNEYS = [
-  "verify_identity",
-  "use_teleporter",
-  "use_timetravel",
-  "borrow",
-  "repay",
   "supply_liquidity",
   "withdraw_susdc",
   "withdraw_jusdc",
+  "verify_identity",
+  "borrow",
+  "repay",
 ] as const;
 export type UserJourney = (typeof USER_JOURNEYS)[number];
 const DEFAULT_JOURNEY: UserJourney = USER_JOURNEYS[0];
@@ -29,8 +29,6 @@ const DEFAULT_JOURNEY: UserJourney = USER_JOURNEYS[0];
 /* ===== Derived groups ===== */
 const ONLY_BORROW_SET = new Set<UserJourney>([
   "verify_identity",
-  "use_teleporter",
-  "use_timetravel",
   "borrow",
 ]);
 const BORROW_SET = new Set<UserJourney>([...ONLY_BORROW_SET, "repay"]);
@@ -92,7 +90,8 @@ export function UserJourneyProvider({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
+  const location = useLocation();
+  const pathname = normalizePath(location?.pathname || "/");
 
   /* Aptos Wallet Adapter */
   const { connected, account } = useWallet();

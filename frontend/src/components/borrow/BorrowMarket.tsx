@@ -7,25 +7,23 @@ import { PullPanel } from '@/components/borrow/PullPanel'
 import { RepayPanel } from '@/components/borrow/RepayPanel'
 import UserJourneyBadge from '@/components/common/UserJourneyBadge'
 import { useUserJourney } from '@/providers/UserProvider'
+import { toast } from 'sonner';
 
 type Tab = 'Pull' | 'Repay'
 
 export function CreditMarket({setShowQR}: any) {
   const [activeTab, setActiveTab] = useState<Tab>('Pull')
-  const { connected, isLoading } = useWallet()
-  const isLoggedIn = connected
-  const loadingNetwork = isLoading
+  const { connected: isLoggedIn, isLoading: loadingNetwork } = useWallet();
+  const { ready, value, is_only_borrow } = useUserJourney();
 
   // Trigger global WalletSelector dialog (handled in WalletSelector via window event listener)
   const openConnect = () => {
     try {
       window.dispatchEvent(new Event('open-wallet-selector'))
     } catch {
-      // fallback: no-op
-      console.log('open-wallet-selector event not handled')
+      toast.error('Could not open the wallet selector. Please try again.');
     }
   }
-  const { ready, value, is_only_borrow } = useUserJourney();
 
   return (
     <TooltipProvider delayDuration={150}>

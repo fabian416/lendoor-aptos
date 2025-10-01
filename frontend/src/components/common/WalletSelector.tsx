@@ -15,54 +15,119 @@ import {
   useWallet,
 } from "@aptos-labs/wallet-adapter-react";
 import { ArrowLeft, ArrowRight, ChevronDown, Copy, LogOut, User } from "lucide-react";
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
+function toAddr(v: unknown): string {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  const s = (v as any)?.toString?.();
+  return typeof s === "string" ? s : "";
+}
+
 export function WalletSelector(walletSortingOptions: WalletSortingOptions) {
   const { account, connected, disconnect, wallet } = useWallet();
 
-  function addrToString(a: unknown) {
-    if (!a) return "";
-    if (typeof a === "string") return a;
-    const s = (a as any)?.toString?.();
-    return typeof s === "string" ? s : "";
-  }
+  // 1) Local, latched address + connected flag to avoid flicker
+  const [addrUI, setAddrUI] = useState<string>("");
+  const latchedConnected = useRef(false);
 
-  const addr = addrToString(account?.address);
-  const label = account?.ansName ?? (addr ? truncateAddress(addr) : "Connect Wallet");
+  // Normalize adapter’s current address
+  const liveAddr = useMemo(() => toAddr((account as any)?.address), [account]);
+  const addr = addrUI || liveAddr; // prefer latched if present
+  const label = addr ? truncateAddress(addr) : "Connect a Wallet";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Allow opening this dialog from anywhere (e.g., panels) via a global event
-  // `window.dispatchEvent(new Event('open-wallet-selector'))`
+  // Open from anywhere
   useEffect(() => {
     const h = () => setIsDialogOpen(true);
     window.addEventListener("open-wallet-selector", h);
     return () => window.removeEventListener("open-wallet-selector", h);
   }, []);
 
-  const closeDialog = useCallback(() => setIsDialogOpen(false), []);
+  // 2) Sync local state from adapter changes (and latch)
+  useEffect(() => {
+    if (liveAddr) {
+      setAddrUI(liveAddr);
+      latchedConnected.current = true;
+    }
+  }, [liveAddr]);
+
+  // 3) Listen to adapter events to close dialog and latch
+  useEffect(() => {
+    const adapter = (wallet as any)?.adapter as
+      | { on?: (ev: string, fn: (...args: any[]) => void) => void; off?: (ev: string, fn: (...args: any[]) => void) => void }
+      | undefined;
+
+    if (!adapter?.on) return;
+
+    const onConnect = () => {
+      const a = toAddr((account as any)?.address);
+      if (a) setAddrUI(a);
+      latchedConnected.current = true;
+      setIsDialogOpen(false);
+    };
+
+    const onAccountChange = (next?: unknown) => {
+      const a = toAddr(next ?? (account as any)?.address);
+      if (a) setAddrUI(a);
+      latchedConnected.current = true;
+      setIsDialogOpen(false);
+    };
+
+    const onDisconnect = () => {
+      latchedConnected.current = false;
+      setAddrUI("");
+    };
+
+    adapter.on("connect", onConnect);
+    adapter.on("accountChange", onAccountChange);
+    adapter.on?.("disconnect", onDisconnect);
+
+    return () => {
+      adapter.off?.("connect", onConnect);
+      adapter.off?.("accountChange", onAccountChange);
+      adapter.off?.("disconnect", onDisconnect);
+    };
+  }, [wallet, account]);
+
+  // 4) Also close dialog when the adapter’s `connected` flips true (extra safety)
+  useEffect(() => {
+    if (connected && isDialogOpen) setIsDialogOpen(false);
+  }, [connected, isDialogOpen]);
 
   const copyAddress = useCallback(async () => {
-    const safe = addrToString(account?.address);
-    if (!safe) return;
+    if (!addr) return;
     try {
-      await navigator.clipboard.writeText(safe);
+      await navigator.clipboard.writeText(addr);
       toast.success("Copied wallet address");
     } catch {
       toast.error("Failed to copy wallet address");
     }
-  }, [account?.address]);
+  }, [addr]);
 
-  return connected ? (
+  const handleDisconnect = useCallback(async () => {
+    try {
+      await disconnect();
+    } finally {
+      // ensure UI clears even if adapter is slow to emit
+      latchedConnected.current = false;
+      setAddrUI("");
+    }
+  }, [disconnect]);
+
+  const uiConnected = latchedConnected.current || connected || !!addr;
+
+  return uiConnected ? (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="cursor-pointer">
+        {/* Re-mount label when addr changes */}
+        <Button key={addr || "no-addr"} variant="outline" size="sm" className="cursor-pointer">
           {label}
         </Button>
       </DropdownMenuTrigger>
@@ -82,7 +147,7 @@ export function WalletSelector(walletSortingOptions: WalletSortingOptions) {
             </a>
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onSelect={disconnect} className="gap-2 text-red-600 focus:text-red-600 cursor-pointer">
+        <DropdownMenuItem onSelect={handleDisconnect} className="gap-2 text-red-600 focus:text-red-600 cursor-pointer">
           <LogOut className="h-4 w-4" /> Disconnect
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -90,18 +155,16 @@ export function WalletSelector(walletSortingOptions: WalletSortingOptions) {
   ) : (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="cursor-pointer"
-        >
+        <Button variant="outline" size="sm" className="cursor-pointer">
           Connect a Wallet
         </Button>
       </DialogTrigger>
-      <ConnectWalletDialog close={closeDialog} {...walletSortingOptions} />
+      <ConnectWalletDialog close={() => setIsDialogOpen(false)} {...walletSortingOptions} />
     </Dialog>
   );
 }
+
+/* ---------- Rest of the file stays the same ---------- */
 
 interface ConnectWalletDialogProps extends WalletSortingOptions {
   close: () => void;
@@ -141,13 +204,6 @@ function ConnectWalletDialog({ close, ...walletSortingOptions }: ConnectWalletDi
                 Aptos Connect <ArrowRight size={16} />
               </AboutAptosConnect.Trigger>
             </p>
-            {/* Disclaimer + Powered by */}
-            <div className="flex flex-col items-center py-1">
-              <p className="text-xs leading-5 text-muted-foreground">
-                By continuing, you agree to Aptos Labs’ Privacy Policy.
-              </p>
-              <span className="text-xs leading-5 text-muted-foreground">Powered by Aptos Labs</span>
-            </div>
             <div className="flex items-center gap-3 pt-4 text-muted-foreground">
               <div className="h-px w-full bg-secondary" />
               Or
@@ -184,14 +240,9 @@ interface WalletRowProps {
   wallet: AdapterWallet | AdapterNotDetectedWallet;
   onConnect?: () => void;
 }
-
 function WalletRow({ wallet, onConnect }: WalletRowProps) {
   return (
-    <WalletItem
-      wallet={wallet}
-      onConnect={onConnect}
-      className="flex items-center justify-between px-4 py-3 gap-4 border rounded-md cursor-pointer"
-    >
+    <WalletItem wallet={wallet} onConnect={onConnect} className="flex items-center justify-between px-4 py-3 gap-4 border rounded-md cursor-pointer">
       <div className="flex items-center gap-4">
         <WalletItem.Icon className="h-6 w-6" />
         <WalletItem.Name className="text-base font-normal" />
@@ -213,11 +264,7 @@ function AptosConnectWalletRow({ wallet, onConnect }: WalletRowProps) {
   return (
     <WalletItem wallet={wallet} onConnect={onConnect} className="cursor-pointer">
       <WalletItem.ConnectButton asChild>
-        <Button
-          size="lg"
-          variant="outline"
-          className="w-full gap-4 cursor-pointer"
-        >
+        <Button size="lg" variant="outline" className="w-full gap-4 cursor-pointer">
           <WalletItem.Icon className="h-5 w-5" />
           <WalletItem.Name className="text-base font-normal" />
         </Button>

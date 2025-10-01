@@ -12,17 +12,17 @@ import { Toaster } from 'sonner';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <WalletProvider>
-      <MoveModuleProvider>
-        <UserJourneyProvider>
-          <BrowserRouter>
-            <Suspense fallback={null}>
-              <App />
-            </Suspense>
-          </BrowserRouter>
-        </UserJourneyProvider>
-        <Toaster richColors position="top-right" />
-      </MoveModuleProvider>
-    </WalletProvider>
+    <BrowserRouter>
+      <WalletProvider>
+        <MoveModuleProvider>
+          <UserJourneyProvider>
+              <Suspense fallback={null}>
+                <App />
+              </Suspense>
+          </UserJourneyProvider>
+          <Toaster richColors position="top-right" />
+        </MoveModuleProvider>
+      </WalletProvider>
+    </BrowserRouter>
   </StrictMode>
 )

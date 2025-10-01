@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { UserJourneyModule } from './user-journey/user-journey.module';
-import { ZkPassportModule } from './zk-passport/zk-passport.module';
+import { ZkMeModule } from './zk-me/zk-me.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -20,7 +20,7 @@ import { AppService } from './app.service';
       logging: ['error', 'warn'],
     }),
     UserJourneyModule,
-    ZkPassportModule,
+    ZkMeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

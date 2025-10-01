@@ -1,45 +1,140 @@
-import { ethers, JsonRpcProvider, parseUnits } from "ethers";
-import dotenv from "dotenv";
-import * as CreditLimitManager from "./abi/CreditLimitManager.json";
-dotenv.config();
+import {
+  Aptos,
+  AptosConfig,
+  Account,
+  Ed25519PrivateKey,
+  AccountAddress,
+  type InputViewFunctionData,
+  type MoveValue,
+  type EntryFunctionArgumentTypes,
+  type U64,
+} from "@aptos-labs/ts-sdk";
 
-const RPC_URL = process.env.RPC_URL;
-if (!RPC_URL) {
-  throw new Error("Missing RPC URL in environment variables");
+/**
+ * Configuration
+ */
+const NODE_URL = process.env.APTOS_NODE_URL ?? "https://api.devnet.aptoslabs.com/v1";
+const PK_HEX = process.env.APTOS_PRIVATE_KEY!;
+const PACKAGE = process.env.LENDOOR_CONTRACT!; // e.g. 0x... (Move package address)
+const COIN = process.env.USDC_TYPE ?? "0x1::aptos_coin::AptosCoin";
+const USDC_DEC = Number(process.env.USDC_DECIMALS ?? "6");
+
+/**
+ * SDK instances
+ */
+const aptos = new Aptos(new AptosConfig({ fullnode: NODE_URL }));
+
+const pk = new Ed25519PrivateKey(PK_HEX.startsWith("0x") ? PK_HEX : `0x${PK_HEX}`);
+export const admin = Account.fromPrivateKey({ privateKey: pk });
+
+/**
+ * Types & helpers
+ */
+type FQName = `${string}::${string}::${string}`;
+const fq = (m: string, f: string) => `${PACKAGE}::${m}::${f}` as FQName;
+
+// Coerce bigint to branded U64 expected by ts-sdk. Guarantees 64-bit range.
+const toU64 = (v: bigint): U64 => BigInt.asUintN(64, v) as unknown as U64;
+
+// Parse/format helpers for Aptos u64 amounts.
+function parseUnitsAptos(amount: string, decimals: number): bigint {
+  const [i, f = ""] = amount.split(".");
+  const base = 10n ** BigInt(decimals);
+  const clean = (f + "0".repeat(decimals)).slice(0, decimals);
+  return BigInt(i || "0") * base + BigInt(clean || "0");
 }
 
-// Set contract address based on environment
-const CONTRACT_ADDRESS = process.env.VITE_LENDOOR_CONTRACT;
-if (!CONTRACT_ADDRESS) {
-  throw new Error("Missing contract addresses in environment variables");
+/**
+ * Build → sign → submit → wait
+ */
+async function signSubmitWait(params: {
+  signer: Account;
+  func: FQName;
+  typeArguments?: string[];
+  functionArguments?: EntryFunctionArgumentTypes[];
+}) {
+  const { signer, func, typeArguments = [], functionArguments = [] } = params;
+
+  const transaction = await aptos.transaction.build.simple({
+    sender: signer.accountAddress,
+    data: {
+      function: func,
+      typeArguments,
+      functionArguments,
+    },
+  });
+
+  const pending = await aptos.signAndSubmitTransaction({
+    signer,
+    transaction,
+  });
+
+  await aptos.waitForTransaction({ transactionHash: pending.hash });
+  return pending.hash;
 }
-// Validate private key
-const privateKey = process.env.PRIVATE_KEY;
-if (!privateKey) {
-  throw new Error("Missing PRIVATE_KEY in environment variables");
-}
 
-// Initialize provider and signer
-const provider = new JsonRpcProvider(RPC_URL);
-const signer = new ethers.Wallet(privateKey, provider);
-
-// Instance of the contract
-const contract = new ethers.Contract(CONTRACT_ADDRESS, CreditLimitManager.abi, signer);
-
-export const giveCreditScoreAndLimit = async (address: string) => {
+/**
+ * Contract calls
+ */
+async function ensureCreditManagerInitialized() {
   try {
-
-
-    const amount = parseUnits("1000", 6);
-    const tx = await contract.setLine(address, 120, amount);
-    console.log("setLine transaction sent:", tx.hash);
-
-    await tx.wait();
-    console.log(`Line set successfully to: ${address}`);
-    return 200;
-  } catch (error) {
-    console.error(`Error setting line:`, error);
+    await signSubmitWait({
+      signer: admin,
+      func: fq("credit_manager", "init"),
+    });
+  } catch {
+    // Already initialized → ignore
   }
-};
+}
 
-export { provider, signer, contract };
+async function adminSetLimitForUser(
+  userAddress: string,
+  amountHuman: string,
+  assetType: string = COIN,
+  decimals: number = USDC_DEC
+) {
+  const amountU64: U64 = toU64(parseUnitsAptos(amountHuman, decimals));
+  const args: EntryFunctionArgumentTypes[] = [
+    AccountAddress.fromString(userAddress),
+    amountU64,
+  ];
+
+  return signSubmitWait({
+    signer: admin,
+    func: fq("credit_manager", "admin_set_limit"),
+    typeArguments: [assetType],
+    functionArguments: args,
+  });
+}
+
+/**
+ * Views
+ */
+export async function getUserLimit(userAddress: string, assetType: string = COIN): Promise<bigint> {
+  const payload: InputViewFunctionData = {
+    function: fq("credit_manager", "get_limit"),
+    typeArguments: [assetType],
+    functionArguments: [userAddress],
+  };
+  const [limit] = await aptos.view<[MoveValue]>({ payload });
+  return BigInt(limit as any);
+}
+
+export async function getUserUsage(userAddress: string, assetType: string = COIN): Promise<bigint> {
+  const payload: InputViewFunctionData = {
+    function: fq("credit_manager", "get_usage"),
+    typeArguments: [assetType],
+    functionArguments: [userAddress],
+  };
+  const [usage] = await aptos.view<[MoveValue]>({ payload });
+  return BigInt(usage as any);
+}
+
+/**
+ * Public API used by your service layer
+ */
+export async function giveCreditScoreAndLimit(address: string) {
+  await ensureCreditManagerInitialized();
+  await adminSetLimitForUser(address, "1000", COIN, USDC_DEC);
+  return 200;
+}

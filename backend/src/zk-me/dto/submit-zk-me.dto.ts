@@ -1,7 +1,7 @@
 // submit-zk-passport.dto.ts
 import { IsString, IsNotEmpty, IsOptional, Allow } from 'class-validator';
 
-export class SubmitZkPassportDto {
+export class SubmitZkMeDto {
   @IsString() walletAddress: string;
   @IsString() requestId: string;
   @IsNotEmpty() proof: unknown;

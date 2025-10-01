@@ -103,6 +103,8 @@ export function SupplyPanel({
   }, [connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Supply Liquidity'
+  const isDisabled = !amount || submitting;
+  const showBadge = ready && (value === "deposit_usdc");
 
   return (
     <>
@@ -120,7 +122,7 @@ export function SupplyPanel({
 
         <form onSubmit={submit} className="w-full">
           {/* Amount input */}
-          <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' />
+          <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' showBadge={showBadge && !amount} />
 
           <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
             {supplyCapLabel}
@@ -129,10 +131,10 @@ export function SupplyPanel({
           {/* Primary action */}
           <Button
             type="submit"
-            disabled={!amount || submitting}
+            disabled={isDisabled}
             className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
           >
-            {ready && (value === "supply_liquidity") && <UserJourneyBadge/>}
+            {!!amount && showBadge && <UserJourneyBadge/>}
             {cta}
           </Button>
         </form>

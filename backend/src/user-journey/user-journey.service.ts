@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { UpdateUserJourneyDto } from './dto/update-user-journey.dto';
 
-const DEFAULT_STEP: User['userJourneyStep'] = 'supply_liquidity';
+const DEFAULT_STEP: User['userJourneyStep'] = 'deposit_usdc';
 
 @Injectable()
 export class UserJourneyService {

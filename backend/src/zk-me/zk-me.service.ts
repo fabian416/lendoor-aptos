@@ -12,7 +12,7 @@ type MappedPassport = Partial<
 
 const DEFAULT_SCORE = 50;
 const DEFAULT_CREDIT_LIMIT_USDC = 15;
-const DEFAULT_STEP: User['userJourneyStep'] = 'supply_liquidity';
+const DEFAULT_STEP: User['userJourneyStep'] = 'deposit_usdc';
 
 @Injectable()
 export class ZkMeService {

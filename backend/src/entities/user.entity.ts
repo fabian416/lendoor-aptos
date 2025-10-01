@@ -11,9 +11,10 @@ import {
 } from "typeorm";
 
 export const USER_JOURNEY_STEPS = [
-  "supply_liquidity",
+  "deposit_usdc",
+  "deposit_susdc",
   "withdraw_susdc",
-  "withdraw_jusdc",
+  "withdraw_usdc",
   "verify_identity",
   "borrow",
   "repay"
@@ -37,9 +38,10 @@ export const decimalNumber = {
 @Check(`score >= 0 AND score <= 1000`)
 @Check(
   `userJourneyStep IN (
-    'supply_liquidity',
-    'withdraw_susdc',
-    'withdraw_jusdc',
+    "deposit_usdc",
+    "deposit_susdc",
+    "withdraw_susdc",
+    "withdraw_usdc",
     'verify_identity',
     'borrow',
     'repay'
@@ -99,7 +101,7 @@ export class User {
   score?: number | null;
 
   /** Paso actual del user journey. */
-  @Column({ type: "text", default: "supply_liquidity" })
+  @Column({ type: "text", default: "deposit_usdc" })
   userJourneyStep!: UserJourneyStep;
 
   @CreateDateColumn()

@@ -16,9 +16,10 @@ import { useLocation } from "react-router-dom";
 
 /* ===== Allowed steps ===== */
 export const USER_JOURNEYS = [
-  "supply_liquidity",
+  "deposit_usdc",
+  "deposit_susdc",
   "withdraw_susdc",
-  "withdraw_jusdc",
+  "withdraw_usdc",
   "verify_identity",
   "borrow",
   "repay",
@@ -33,9 +34,10 @@ const ONLY_BORROW_SET = new Set<UserJourney>([
 ]);
 const BORROW_SET = new Set<UserJourney>([...ONLY_BORROW_SET, "repay"]);
 const LEND_SET = new Set<UserJourney>([
-  "supply_liquidity",
+  "deposit_usdc",
+  "deposit_susdc",
   "withdraw_susdc",
-  "withdraw_jusdc",
+  "withdraw_usdc",
 ]);
 
 /* ===== Utils ===== */

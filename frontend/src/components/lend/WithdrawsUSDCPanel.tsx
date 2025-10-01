@@ -131,7 +131,8 @@ export function WithdrawsUSDCPanel({
   const availableLabelValue = underlyingBalance
 
   // Disable withdraw if amount empty, submitting, or pool not ready
-  const disableBtn = !amount || submitting || !!poolNotReady
+  const isDisabled = !amount || submitting || !!poolNotReady;
+  const showBadge = ready && (value === "withdraw_usdc");
 
   return (
     <>
@@ -155,7 +156,7 @@ export function WithdrawsUSDCPanel({
         )}
 
         <form onSubmit={submit} className="w-full">
-          <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' />
+          <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' showBadge={showBadge && !amount && !!poolNotReady} />
 
           <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
             {availableLabel}{availableLabelValue}
@@ -163,10 +164,10 @@ export function WithdrawsUSDCPanel({
 
           <Button
             type="submit"
-            disabled={disableBtn}
+            disabled={isDisabled}
             className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold disabled:opacity-60"
           >
-            {ready && (value === "withdraw_susdc") && <UserJourneyBadge/>}
+            {!!amount && !!poolNotReady && showBadge && <UserJourneyBadge/>}
             {cta}
           </Button>
         </form>

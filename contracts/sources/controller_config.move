@@ -1,48 +1,101 @@
 //! Controller/Market-wide config storage & access handles
 module lendoor::controller_config {
     use std::signer;
+    use aptos_framework::object::{Self, ObjectCore};
 
     friend lendoor::controller;
 
-    /// `ControllerConfig` is not set.
+    // `ControllerConfig` is not set.
     const ECONTROLLER_NO_CONFIG: u64 = 1;
-
-    /// Reserve admin mismatch.
+    // Admin mismatch.
     const ECONTROLLER_ADMIN_MISMATCH: u64 = 2;
+    // Only the package owner (object owner or @lendoor itself) may perform this action.
+    const EONLY_PACKAGE_OWNER: u64 = 3;
+    // When init_config is called with an admin different from the caller.
+    const EADMIN_MUST_EQUAL_CALLER: u64 = 4;
 
-    /// When the account is not Aries Markets Account.
-    const ERESERVE_NOT_ARIES: u64 = 3;
-
+    // Global controller config.
+    // We store who is the admin, and which on-chain address acts as "host"
+    // (where singleton resources like Reserves will live).
     struct ControllerConfig has key {
         admin: address,
+        host: address,
     }
 
-    public(friend) fun init_config(account: &signer, admin: address) {
-        assert!(signer::address_of(account) == @lendoor, ERESERVE_NOT_ARIES);
-        move_to(
-          account, 
-          ControllerConfig{
-            admin,
-          }
-        );
+    // True if `sender` controls the published package address `@lendoor`.
+    // Works both for packages published under an Object and under a plain account.
+    public fun is_package_owner(sender: address): bool {
+        if (object::is_object(@lendoor)) {
+            let core = object::address_to_object<ObjectCore>(@lendoor);
+            object::is_owner(core, sender)
+        } else {
+            sender == @lendoor
+        }
     }
 
-    fun assert_config_present() {
-        assert!(exists<ControllerConfig>(@lendoor), ECONTROLLER_NO_CONFIG);
+    // One-time initialization. Must be called by the package owner.
+    // Sets the runtime `admin` and the `host` address where singletons will be stored.
+    //
+    // IMPORTANT:
+    // - We require `admin == signer::address_of(account)` to make the config discoverable
+    //   under a deterministic address (the caller/admin address). This avoids relying on
+    //   @lendoor when the package is published under an Object address.
+    public entry fun init_config(account: &signer, admin: address) acquires ControllerConfig {
+        assert!(is_package_owner(signer::address_of(account)), EONLY_PACKAGE_OWNER);
+        assert!(admin == signer::address_of(account), EADMIN_MUST_EQUAL_CALLER);
+
+        let where_ = signer::address_of(account);
+        if (!exists<ControllerConfig>(where_)) {
+            move_to(account, ControllerConfig { admin, host: where_ });
+        } else {
+            // Ya existe: valida que el admin coincida con quien llama,
+            // así no rompemos la configuración previa.
+            let cfg = borrow_global<ControllerConfig>(where_);
+            assert!(cfg.admin == admin, ECONTROLLER_ADMIN_MISMATCH);
+        }
     }
 
-    #[test_only]
-    public fun config_present(addr: address): bool {
+    public(friend) entry fun init_if_needed(account: &signer, admin: address) acquires ControllerConfig {
+        // Reusa la lógica idempotente de init_config.
+        init_config(account, admin);
+    }
+
+    #[view]
+    // Returns true iff a ControllerConfig resource exists at `addr`.
+    public fun config_present_at(addr: address): bool {
         exists<ControllerConfig>(addr)
     }
 
-    public fun is_admin(addr: address): bool acquires ControllerConfig {
-        assert_config_present();
-        let config = borrow_global<ControllerConfig>(@lendoor);
-        return config.admin == addr
+    #[view]
+    // Returns true if config exists under @lendoor (account-published setups).
+    public fun config_present(): bool {
+        exists<ControllerConfig>(@lendoor)
     }
 
+    // ==== Accessors (do not return references) ====
+
+    #[view]
+    public fun admin_addr(): address acquires ControllerConfig {
+        if (exists<ControllerConfig>(@lendoor)) {
+            let cfg = borrow_global<ControllerConfig>(@lendoor);
+            cfg.admin
+        } else {
+            abort ECONTROLLER_NO_CONFIG
+        }
+    }
+
+    #[view]
+    public fun host_addr(): address acquires ControllerConfig {
+        if (exists<ControllerConfig>(@lendoor)) {
+            let cfg = borrow_global<ControllerConfig>(@lendoor);
+            cfg.host
+        } else {
+            abort ECONTROLLER_NO_CONFIG
+        }
+    }
+
+    // Admin check that other modules should call.
     public fun assert_is_admin(addr: address) acquires ControllerConfig {
-        assert!(is_admin(addr), ECONTROLLER_ADMIN_MISMATCH);
+        assert!(addr == admin_addr(), ECONTROLLER_ADMIN_MISMATCH);
     }
 }

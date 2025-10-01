@@ -6,25 +6,24 @@ import { Card } from '@/components/ui/card'
 import { ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '@/components/common/CenteredAmountInput'
+import { JrApyKPI } from '@/components/kpi/JrAPY'
 import { BackingTVVKPI } from '@/components/kpi/BackingTVV'
-import { SrApyKPI } from '@/components/kpi/SrAPY'
 import UserJourneyBadge from '@/components/common/UserJourneyBadge'
 import { useUserJourney } from '@/providers/UserJourneyProvider'
-import { SusdcBalanceKPI } from '@/components/kpi/sUSDCBalance'
-import { useApproveAndDepositUSDC } from '@/hooks/senior/useApproveAndDepositUSDC'
-
-
+import { JusdcBalanceKPI } from '@/components/kpi/jUSDCBalance'
+import { useApproveAndDepositSUSDC } from '@/hooks/junior/useApproveAndDepositSUSDC'
+import { useIsLoggedIn } from '@dynamic-labs/sdk-react-core'
 
 type SupplyPanelProps = {
-  isLoggedIn: boolean
+  isLoggedIn?: boolean
   loadingNetwork: boolean
   onConnect: () => void
   onSupply: (amount: string) => void
-  supplyCapLabel?: string // ej: "SUPPLY CAP $10.000"
+  supplyCapLabel?: string
 }
 
-export function SupplyPanelUSDC({
-  isLoggedIn,
+export function SupplyPanelSUSDC({
+  isLoggedIn: isLoggedInProp,
   loadingNetwork,
   onConnect,
   onSupply,
@@ -33,7 +32,8 @@ export function SupplyPanelUSDC({
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const { ready, value } = useUserJourney()
-  const { submit, submitting } = useApproveAndDepositUSDC()
+  const { submit, submitting } = useApproveAndDepositSUSDC()
+  const isLoggedIn = isLoggedInProp ?? useIsLoggedIn()
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,39 +47,38 @@ export function SupplyPanelUSDC({
   }
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Supply Liquidity'
-  const isDisabled = !amount || submitting;
-  const showBadge = ready && (value === "deposit_usdc");
+  const isDisabled = !amount || submitting
+  const showBadge = ready && value === 'deposit_susdc'
 
   return (
     <>
       <div className="grid grid-cols-4 gap-2 w-full mx-auto">
-        <SrApyKPI />
+        <JrApyKPI />
         <BackingTVVKPI value="10.4M" />
-        <SusdcBalanceKPI />
+        <JusdcBalanceKPI />
       </div>
 
       <Card className="p-4 border-2 border-border/50">
         <div className="flex items-center justify-between mb-4">
-          <span className="text-xs text-muted-foreground font-mono">EARN BY LENDING</span>
+          <span className="text-xs text-muted-foreground font-mono">EARN BY LENDING (Junior)</span>
         </div>
 
         <form onSubmit={onSubmit} className="w-full">
           <CenteredAmountInput value={amount} onChange={setAmount} showBadge={showBadge && !amount} />
-            <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
+
+          <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
             {supplyCapLabel}
-            </div>
+          </div>
 
-            {/* botón full width */}
-            <Button
-              type="submit"
-              disabled={isDisabled}
-              className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
-            >
-              {!!amount && showBadge && <UserJourneyBadge/>}
-              {cta}
-            </Button>
+          <Button
+            type="submit"
+            disabled={isDisabled}
+            className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
+          >
+            {!!amount && showBadge && <UserJourneyBadge />}
+            {cta}
+          </Button>
         </form>
-
 
         <div className="space-y-2 mb-4">
           <div className="flex justify-between items-center">
@@ -90,7 +89,6 @@ export function SupplyPanelUSDC({
           </div>
         </div>
 
-        {/* Collapsible Info */}
         <div className="border-top border-border pt-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -110,7 +108,7 @@ export function SupplyPanelUSDC({
               <div className="text-xs font-medium text-muted-foreground">ASSETS</div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs">USDC / sUSDC</span>
+                  <span className="text-xs">sUSDC → jUSDC</span>
                   <Info className="w-3 h-3 text-muted-foreground" />
                 </div>
                 <span className="text-xs">Pool-backed</span>

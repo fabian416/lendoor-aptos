@@ -2,7 +2,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, DEFAULT_STEP } from '../entities/user.entity';
+import { User } from '../entities/user.entity';
 import { SubmitZkMeDto } from './dto/submit-zk-me.dto';
 import { giveCreditScoreAndLimit } from 'src/config/contractConfig';
 
@@ -90,7 +90,7 @@ export class ZkMeService {
     // 3) Upsert usuario
     let user = await this.userRepo.findOne({ where: { walletAddress: wallet } });
     if (!user) {
-      user = this.userRepo.create({ walletAddress: wallet, userJourneyStep: DEFAULT_STEP });
+      user = this.userRepo.create({ walletAddress: wallet });
     }
 
     // 4) Mapear disclosures desde queryResult verificado
@@ -125,7 +125,6 @@ export class ZkMeService {
       user: {
         id: fresh.id,
         walletAddress: fresh.walletAddress,
-        userJourneyStep: fresh.userJourneyStep,
         score: fresh.score,
         creditLimit: fresh.creditLimit ?? null,
       },

@@ -2,12 +2,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, DEFAULT_STEP } from '../entities/user.entity';
-import { UpdateUserJourneyDto } from './dto/update-user-journey.dto';
-
+import { User } from '../entities/user.entity';
 
 @Injectable()
-export class UserJourneyService {
+export class UserService {
   constructor(@InjectRepository(User) private readonly repo: Repository<User>) {}
 
   private normalizeWallet(addr: string) {
@@ -25,7 +23,7 @@ export class UserJourneyService {
 
     let user = await this.repo.findOne({ where: { walletAddress: wallet } });
     if (!user) {
-      user = this.repo.create({ walletAddress: wallet, userJourneyStep: DEFAULT_STEP });
+      user = this.repo.create({ walletAddress: wallet });
       await this.repo.save(user);
     }
 
@@ -33,28 +31,15 @@ export class UserJourneyService {
 
     return {
       walletAddress: user.walletAddress,
-      step: user.userJourneyStep, 
       isVerified,      
       creditLimit: user.creditLimit ?? null,
     };
-  }
-
-  async updateStep(dto: UpdateUserJourneyDto) {
-    const wallet = this.normalizeWallet(dto.walletAddress);
-    let user = await this.repo.findOne({ where: { walletAddress: wallet } });
-    if (!user) {
-      user = this.repo.create({ walletAddress: wallet, userJourneyStep: dto.step });
-    } else {
-      user.userJourneyStep = dto.step;
-    }
-    await this.repo.save(user);
-    return { walletAddress: user.walletAddress, step: user.userJourneyStep };
   }
 
   async getStrict(walletAddress: string) {
     const wallet = this.normalizeWallet(walletAddress);
     const user = await this.repo.findOne({ where: { walletAddress: wallet } });
     if (!user) throw new NotFoundException('User not found');
-    return { walletAddress: user.walletAddress, step: user.userJourneyStep };
+    return { walletAddress: user.walletAddress };
   }
 }

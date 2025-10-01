@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { WalletSelector } from "@/components/common/WalletSelector";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { useUserJourney } from '@/providers/UserProvider';
+import { useUserJourney } from '@/providers/UserJourneyProvider';
 import UserJourneyBadge from '@/components/common/UserJourneyBadge';
 
 function labelClasses(isActive: boolean) {

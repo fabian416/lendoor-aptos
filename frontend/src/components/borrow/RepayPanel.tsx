@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { CenteredAmountInput } from '@/components/common/CenteredAmountInput'
@@ -10,122 +10,69 @@ import { BaseApyKPI } from '@/components/kpi/BaseAPY'
 import { OutstandingKPI } from '@/components/kpi/Outstanding'
 import { CreditScoreKPI } from '@/components/kpi/Score'
 import UserJourneyBadge from '@/components/common/UserJourneyBadge'
+import { useUserJourney } from '@/providers/UserJourneyProvider'
 import ExpandedMenu from '@/components/borrow/ExpandedMenu'
-import { useUserJourney } from '@/providers/UserProvider'
-import { useMoveModule } from '@/providers/MoveModuleProvider'
-import { useWallet } from '@aptos-labs/wallet-adapter-react'
-import { USDC_TYPE, USDC_DECIMALS } from '@/lib/constants'
-import { parseUnitsAptos, formatUnitsAptos, fq } from '@/lib/utils'
-
+import { useRepay } from '@/hooks/borrow/useRepay'
+import { useUser } from '@/providers/UserProvider'
 
 type RepayPanelProps = {
-  isLoggedIn: boolean,
-  loadingNetwork: boolean,
-  onConnect: () => void,
-  outstandingLabel?: string,
+  isLoggedIn: boolean
+  loadingNetwork: boolean
+  onConnect: () => void
+  onRepay?: (amount: string) => void // now optional; hook handles chain call
+  outstandingLabel?: string
 }
 
 export function RepayPanel({
   isLoggedIn,
   loadingNetwork,
   onConnect,
+  onRepay,
   outstandingLabel = 'OUTSTANDING: ',
 }: RepayPanelProps) {
   const [amount, setAmount] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
-  const { ready, value } = useUserJourney()
-  const [submitting, setSubmitting] = useState(false)
-  const [outstanding, setOutstanding] = useState('0')
+  const { ready, value } = useUserJourney();
+  const { borrowedDisplay: borrowedOutstanding} = useUser();
+  const { submit, submitting } = useRepay();
 
-  const { account } = useWallet()
-  const connectedAddress = account?.address
-  const { callView, entry } = useMoveModule()
-
-  // --- Action: repay debt by depositing with repay_only = true
-  const submit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isLoggedIn) return onConnect()
-    if (!amount || !connectedAddress) return
-
-    setSubmitting(true)
+    if (!amount) return
     try {
-      // Optional: ensure the user has a profile (uncomment if needed)
-      // const [isReg] = await callView<[boolean]>(fq('profile','is_registered'), [], [connectedAddress])
-      // if (!isReg) {
-      //   const name = new TextEncoder().encode('main')
-      //   await entry(fq('controller','register_user'), [], [name], { checkSuccess: true })
-      // }
-
-      const amountU64 = parseUnitsAptos(amount, USDC_DECIMALS)
-      const profileName = new TextEncoder().encode('main')
-
-      // controller::deposit<Coin>(profile_name, amount, repay_only=true)
-      await entry(
-        fq('controller', 'deposit'),
-        [USDC_TYPE],
-        [profileName, amountU64.toString(), true],
-        { checkSuccess: true }
-      )
-
-      await refreshOutstanding()
+      await submit(amount)
+      onRepay?.(amount)
+      setAmount('')
     } catch (err) {
-      console.error('repay error:', err)
-    } finally {
-      setSubmitting(false)
+      console.error(err)
     }
   }
-
-  // --- Read outstanding debt:
-  // profile::profile_loan<Coin>(user) -> (borrowed_share_decimal, borrowed_amount_decimal[1e18])
-  // Convert borrowed_amount_decimal (1e18) to token base units (1e6) by dividing by 1e12.
-  const refreshOutstanding = async () => {
-    if (!connectedAddress) return
-    try {
-      const [_shareRaw, borrowedDecRaw] = await callView<[string, string]>(
-        fq('profile', 'profile_loan'),
-        [USDC_TYPE],
-        [connectedAddress]
-      )
-      const borrowedDec = BigInt(borrowedDecRaw)          // raw 1e18
-      const baseUnits = borrowedDec / 1_000_000_000_000n  // /1e12 -> 1e6
-      const next = formatUnitsAptos(baseUnits, USDC_DECIMALS)
-      setOutstanding(prev => (prev === next ? prev : next))
-    } catch (e) {
-      console.error('read profile_loan:', e)
-    }
-  }
-
-  useEffect(() => {
-    if (!connectedAddress) return
-    refreshOutstanding()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Repay'
-  const isDisabled = !amount || submitting;
-  const showBadge = ready && (value === "repay");
+  const isDisabled = !amount || submitting
+  const showBadge = ready && value === 'repay'
 
   return (
     <>
       <div className="grid grid-cols-4 gap-2 w-full mx-auto">
         <BaseApyKPI value="6.82%" />
-        <OutstandingKPI value={outstanding} />
-        <CreditScoreKPI value="120/255" />
+        <OutstandingKPI value={borrowedOutstanding} />
+        <CreditScoreKPI />
       </div>
 
       <Card className="p-4 border-2 border-border/50">
         <div className="flex items-center justify-between mb-4">
-          <span className="text-xs text-muted-foreground font-mono">
-            REPAY YOUR LOAN
-          </span>
+          <span className="text-xs text-muted-foreground font-mono">EARN BY LENDING</span>
         </div>
 
         <div className="mb-4">
-          <form onSubmit={submit} className="w-full">
-              <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' showBadge={showBadge && !amount} />
+          <form onSubmit={handleSubmit} className="w-full">
+            <CenteredAmountInput value={amount} onChange={setAmount} showBadge={showBadge && !amount} />
 
             <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
-              {outstandingLabel}{outstanding} USDC
+              {outstandingLabel}
+              {borrowedOutstanding}
             </div>
 
             <Button
@@ -133,8 +80,8 @@ export function RepayPanel({
               disabled={isDisabled}
               className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
             >
-              {!!amount && showBadge && <UserJourneyBadge/>}
-              {cta}
+              {!!amount && showBadge && <UserJourneyBadge />}
+              {submitting ? 'Repaying…' : cta}
             </Button>
           </form>
         </div>
@@ -142,7 +89,7 @@ export function RepayPanel({
         <div className="space-y-2 mb-2">
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">
-              TX Cost <InfoTip label="Estimated gas for this repayment (controller.deposit with repay_only=true)." variant="light" />
+              TX Cost <InfoTip label="Estimated gas for this repayment." contentClassName="font-display text-[11px] leading-snug" />
             </span>
             <span className="text-xs">-</span>
           </div>
@@ -150,7 +97,7 @@ export function RepayPanel({
             <span className="text-xs text-muted-foreground">
               Repayment Type{' '}
               <InfoTip
-                label="Depending on market settings, repayments may prioritize interest then principal."
+                label="Depending on market settings, repayments may prioritize interest → principal."
                 contentClassName="font-display text-[11px] leading-snug"
               />
             </span>
@@ -172,7 +119,7 @@ export function RepayPanel({
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
 
-          {isExpanded && <ExpandedMenu score="120/255" /> }
+          {isExpanded && <ExpandedMenu />}
         </div>
       </Card>
     </>

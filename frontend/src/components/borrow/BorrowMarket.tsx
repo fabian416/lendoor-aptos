@@ -1,28 +1,28 @@
 'use client'
 
 import { useState } from 'react'
-import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { PullPanel } from '@/components/borrow/PullPanel'
 import { RepayPanel } from '@/components/borrow/RepayPanel'
 import UserJourneyBadge from '@/components/common/UserJourneyBadge'
-import { useUserJourney } from '@/providers/UserProvider'
-import { toast } from 'sonner';
+import { useUserJourney } from '@/providers/UserJourneyProvider'
 
 type Tab = 'Pull' | 'Repay'
 
 export function CreditMarket({setShowQR}: any) {
   const [activeTab, setActiveTab] = useState<Tab>('Pull')
-  const { connected: isLoggedIn, isLoading: loadingNetwork } = useWallet();
+  //const isLoggedIn = useIsLoggedIn()
+  //const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
+  const isLoggedIn = true;
+  const [loadingNetwork, setShowAuthFlow] = useState(true)
   const { ready, value, is_only_borrow } = useUserJourney();
-
-  // Trigger global WalletSelector dialog (handled in WalletSelector via window event listener)
-  const openConnect = () => {
-    try {
-      window.dispatchEvent(new Event('open-wallet-selector'))
-    } catch {
-      toast.error('Could not open the wallet selector. Please try again.');
-    }
+  
+  // TODO: conecta con tus contratos
+  const handlePull = (amt: string) => {
+    console.log('Pull amount:', amt)
+  }
+  const handleRepay = (amt: string) => {
+    console.log('Repay amount:', amt)
   }
 
   return (
@@ -56,14 +56,16 @@ export function CreditMarket({setShowQR}: any) {
             <PullPanel
               isLoggedIn={!!isLoggedIn}
               loadingNetwork={loadingNetwork}
-              onConnect={openConnect}
+              onConnect={() => setShowAuthFlow(true)}
+              onPull={(amt) => handlePull(amt)}
               setShowQR={setShowQR}
             />
           ) : (
             <RepayPanel
               isLoggedIn={!!isLoggedIn}
               loadingNetwork={loadingNetwork}
-              onConnect={openConnect}
+              onConnect={() => setShowAuthFlow(true)}
+              onRepay={(amt) => handleRepay(amt)}
             />
           )}
       </div>

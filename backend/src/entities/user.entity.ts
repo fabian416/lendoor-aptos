@@ -1,4 +1,3 @@
-// src/entities/user.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -9,20 +8,6 @@ import {
   UpdateDateColumn,
   Check,
 } from "typeorm";
-
-export const USER_JOURNEY_STEPS = [
-  "deposit_usdc",
-  "deposit_susdc",
-  "withdraw_susdc",
-  "withdraw_usdc",
-  "verify_identity",
-  "borrow",
-  "repay"
-] as const;
-
-export type UserJourneyStep = typeof USER_JOURNEY_STEPS[number];
-
-export const DEFAULT_STEP: User['userJourneyStep'] = 'deposit_usdc';
 
 const lowercase = {
   to: (v?: string | null) => (v == null ? null : v.toLowerCase()),
@@ -39,17 +24,7 @@ export const decimalNumber = {
 @Unique("uq_user_document", ["documentType", "documentNumber"])
 @Index("idx_user_wallet", ["walletAddress"], { unique: true })
 @Check(`score >= 0 AND score <= 1000`)
-@Check(
-  `userJourneyStep IN (
-    "deposit_usdc",
-    "deposit_susdc",
-    "withdraw_susdc",
-    "withdraw_usdc",
-    'verify_identity',
-    'borrow',
-    'repay'
-  )`,
-)
+
 export class User {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -102,10 +77,6 @@ export class User {
   /** Score (0–1000). */
   @Column({ type: "integer", nullable: true, default: null })
   score?: number | null;
-
-  /** Paso actual del user journey. */
-  @Column({ type: "text", default: "deposit_usdc" })
-  userJourneyStep!: UserJourneyStep;
 
   @CreateDateColumn()
   createdAt!: Date;

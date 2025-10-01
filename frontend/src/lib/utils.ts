@@ -24,3 +24,5 @@ export function formatUnitsAptos(v: bigint | string, decimals: number): string {
 
 // FQName builder
 export const fq = (moduleName: string, fn: string) => `${LENDOOR_CONTRACT}::${moduleName}::${fn}`
+
+export const DECIMALS = 4;

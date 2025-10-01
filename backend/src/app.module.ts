@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
-import { UserJourneyModule } from './user-journey/user-journey.module';
+import { UserModule } from './user/user.module';
 import { ZkMeModule } from './zk-me/zk-me.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -19,7 +19,7 @@ import { AppService } from './app.service';
       entities: [User],
       logging: ['error', 'warn'],
     }),
-    UserJourneyModule,
+    UserModule,
     ZkMeModule,
   ],
   controllers: [AppController],

@@ -135,6 +135,8 @@ export function PullPanel({
   }, [connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Borrow now'
+  const isDisabled = !amount || submitting;
+  const showBadge = ready && (value === "verify_identity" || value === "borrow");
 
   return (
     <>
@@ -160,17 +162,17 @@ export function PullPanel({
 
         <div className="mb-4">
           <form onSubmit={submit} className="w-full">
-            <CenteredAmountInput value={amount} onChange={setAmount} symbol="¢" />
+            <CenteredAmountInput value={amount} onChange={setAmount}  symbol='¢' showBadge={showBadge && !amount} />
             <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
               {maxPullLabel}{toBorrowPretty}{" USDC"}
             </div>
 
             <Button
               type="submit"
-              disabled={!amount || submitting}
+              disabled={isDisabled}
               className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
             >
-              {ready && (value === 'verify_identity' || value === 'borrow') && <UserJourneyBadge />}
+              {!!amount && showBadge && <UserJourneyBadge/>}
               {cta}
             </Button>
           </form>

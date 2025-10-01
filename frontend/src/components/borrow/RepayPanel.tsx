@@ -102,6 +102,8 @@ export function RepayPanel({
   }, [connectedAddress, submitting])
 
   const cta = !isLoggedIn && !loadingNetwork ? 'Connect Wallet' : 'Repay'
+  const isDisabled = !amount || submitting;
+  const showBadge = ready && (value === "repay");
 
   return (
     <>
@@ -120,7 +122,7 @@ export function RepayPanel({
 
         <div className="mb-4">
           <form onSubmit={submit} className="w-full">
-            <CenteredAmountInput value={amount} onChange={setAmount} symbol="¢" />
+              <CenteredAmountInput value={amount} onChange={setAmount} symbol='¢' showBadge={showBadge && !amount} />
 
             <div className="mt-1 mb-4 text-xs text-muted-foreground text-center">
               {outstandingLabel}{outstanding} USDC
@@ -128,10 +130,10 @@ export function RepayPanel({
 
             <Button
               type="submit"
-              disabled={!amount || submitting}
+              disabled={isDisabled}
               className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 cursor-pointer text-base font-semibold"
             >
-              {ready && (value === 'repay') && <UserJourneyBadge />}
+              {!!amount && showBadge && <UserJourneyBadge/>}
               {cta}
             </Button>
           </form>

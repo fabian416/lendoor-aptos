@@ -36,6 +36,7 @@ module lendoor::controller {
     /// When the account is not Aries Markets Account. 
     const ECONTROLLER_NOT_ARIES: u64 = 2;
 
+
     #[event]
     struct AddReserveEvent<phantom CoinType> has drop, store  {
         signer_addr: address,
@@ -688,4 +689,10 @@ module lendoor::controller {
         fa_to_coin_wrapper::add_fa_if_needed<WCoin>(account, metadata);
     }
 
+    public entry fun init_reserves_if_needed(account: &signer) {
+        controller_config::assert_is_admin(signer::address_of(account));
+        if (!reserve::reserves_exist()) {
+            reserve::init_if_needed(account);
+        };
+    }
 }

@@ -138,14 +138,32 @@ module lendoor::reserve {
         farm_type: TypeInfo,
     }
 
-    public(friend) fun init(account: &signer) {
-        controller_config::assert_is_admin(signer::address_of(account));
-        let host = controller_config::host_addr();
-        assert!(!exists<Reserves>(host), ERESERVE_ALREADY_EXIST);
-        // Guardamos bajo el mismo address que usará todo el sistema (host)
-        move_to(account, Reserves { stats: table::new() });
+    public entry fun init(account: &signer) {
+        init_if_needed(account);
     }
 
+    #[view]
+    public fun reserves_present(): bool {
+        exists<Reserves>(controller_config::host_addr())
+    }
+
+    /// Idempotent initializer for the global `Reserves` singleton.
+    /// Creates `Reserves` at the configured host address if it doesn't exist yet.
+    public(friend) fun init_if_needed(account: &signer) {
+        // Only the configured admin can initialize storage
+        controller_config::assert_is_admin(signer::address_of(account));
+        let host = controller_config::host_addr();
+        if (!exists<Reserves>(host)) {
+            move_to(account, Reserves { stats: table::new() });
+        };
+    }
+
+    #[view]
+    public fun reserves_exist(): bool {
+        let host = controller_config::host_addr();
+        exists<Reserves>(host)
+    }
+    
     #[view]
     public fun reserve_state<CoinType>(): ReserveDetails acquires Reserves {
         reserve_details(std_type<CoinType>())
@@ -721,6 +739,8 @@ module lendoor::reserve {
         reserve_conf: ReserveConfig,
         interest_rate_conf: InterestRateConfig
     ): bool acquires Reserves {
+        // Asegura que el singleton Reserves exista antes de crear la reserva específica.
+        init_if_needed(admin);
         if (exists_for<Coin0>()) {
             false
         } else {
@@ -728,5 +748,6 @@ module lendoor::reserve {
             true
         }
     }
+
 
 }

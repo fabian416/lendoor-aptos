@@ -10,6 +10,7 @@
     "move:publish_config": "node ./scripts/move/publish_config.js",
     "move:publish_lendoor": "node ./scripts/move/publish_lendoor.js",
     "move:publish": "yarn move:publish_utils && yarn move:publish_config && yarn move:publish_lendoor",
+    "move:init": "node ./scripts/move/init.js",
     "move:staging:clear": "node ./scripts/move/clear_staging.js",
     "move:upgrade": "node ./scripts/move/upgrade",
     "dev": "vite",

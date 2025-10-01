@@ -24,7 +24,7 @@ type SupplyPanelProps = {
   supplyCapLabel?: string
 }
 
-export function SupplyPanel({
+export function SupplyPanelUSDC({
   isLoggedIn,
   loadingNetwork,
   onConnect,

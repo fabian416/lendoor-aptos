@@ -3,15 +3,15 @@
 import { useState } from 'react'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { SupplyPanel } from '@/components/lend/SupplyPanelUSDC'
-import { SupplyPanelSUSDC } from '@/components/lend/SupplyPaneljUSDC'
-import { WithdrawsUSDCPanel } from '@/components/lend/WithdrawsUSDCPanel'
-import { WithdrawjUSDCPanel } from '@/components/lend/WithdrawjUSDCPanel'
+import { SupplyPanelUSDC } from '@/components/lend/SupplyPanelUSDC'
+import { SupplyPanelSUSDC } from '@/components/lend/SupplyPanelSUSDC'
+import { WithdrawUSDCPanel } from '@/components/lend/WithdrawUSDCPanel'
+import { WithdrawSUSDCPanel } from '@/components/lend/WithdrawSUSDCPanel'
 import UserJourneyBadge from '@/components/common/UserJourneyBadge'
 import { useUserJourney } from '@/providers/UserProvider'
 import { toast } from 'sonner';
 
-type Tab = 'Supply USDC' | 'Supply sUSDC' | 'Withdraw sUSDC' | 'Withdraw jUSDC'
+type Tab = 'Supply USDC' | 'Supply sUSDC' | 'Withdraw USDC' | 'Withdraw sUSDC'
 
 export function LendMarket() {
   const [activeTab, setActiveTab] = useState<Tab>('Supply USDC')
@@ -35,7 +35,7 @@ export function LendMarket() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex gap-1">
-              {(['Supply USDC','Supply sUSDC', 'Withdraw sUSDC', 'Withdraw jUSDC'] as Tab[]).map((tab) => (
+              {(['Supply USDC','Supply sUSDC', 'Withdraw USDC', 'Withdraw sUSDC'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -46,9 +46,10 @@ export function LendMarket() {
                   }`}
                 >
 
-                  {ready && value == "supply_liquidity" && activeTab != tab && tab == "Supply USDC" && <UserJourneyBadge />}
+                  {ready && value == "deposit_usdc" && activeTab != tab && tab == "Supply USDC" && <UserJourneyBadge />}
+                  {ready && value == "deposit_susdc" && activeTab != tab && tab == "Supply sUSDC" && <UserJourneyBadge />}
+                  {ready && value == "withdraw_usdc" && activeTab != tab && tab == "Withdraw USDC" && <UserJourneyBadge />}
                   {ready && value == "withdraw_susdc" && activeTab != tab && tab == "Withdraw sUSDC" && <UserJourneyBadge />}
-                  {ready && value == "withdraw_jusdc" && activeTab != tab && tab == "Withdraw jUSDC" && <UserJourneyBadge />}
                   &nbsp;&nbsp;
                   {tab}
                 </button>
@@ -58,7 +59,7 @@ export function LendMarket() {
         </div>
 
         {activeTab === 'Supply USDC' ? (
-          <SupplyPanel
+          <SupplyPanelUSDC
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}
@@ -69,14 +70,14 @@ export function LendMarket() {
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}
           />
-        ) : activeTab === 'Withdraw sUSDC' ? (
-          <WithdrawsUSDCPanel
+        ) : activeTab === 'Withdraw USDC' ? (
+          <WithdrawUSDCPanel
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}
           />
         ) :
-          <WithdrawjUSDCPanel
+          <WithdrawSUSDCPanel
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
             onConnect={openConnect}

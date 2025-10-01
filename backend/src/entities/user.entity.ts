@@ -19,7 +19,10 @@ export const USER_JOURNEY_STEPS = [
   "borrow",
   "repay"
 ] as const;
+
 export type UserJourneyStep = typeof USER_JOURNEY_STEPS[number];
+
+export const DEFAULT_STEP: User['userJourneyStep'] = 'deposit_usdc';
 
 const lowercase = {
   to: (v?: string | null) => (v == null ? null : v.toLowerCase()),

@@ -24,7 +24,7 @@ type WithdrawPanelProps = {
   availableLabel?: string // e.g. "AVAILABLE: $"
 }
 
-export function WithdrawsUSDCPanel({
+export function WithdrawUSDCPanel({
   isLoggedIn,
   loadingNetwork,
   onConnect,

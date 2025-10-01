@@ -2,7 +2,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../entities/user.entity';
+import { User, DEFAULT_STEP } from '../entities/user.entity';
 import { SubmitZkMeDto } from './dto/submit-zk-me.dto';
 import { giveCreditScoreAndLimit } from 'src/config/contractConfig';
 
@@ -12,7 +12,6 @@ type MappedPassport = Partial<
 
 const DEFAULT_SCORE = 50;
 const DEFAULT_CREDIT_LIMIT_USDC = 15;
-const DEFAULT_STEP: User['userJourneyStep'] = 'deposit_usdc';
 
 @Injectable()
 export class ZkMeService {

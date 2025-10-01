@@ -2,10 +2,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../entities/user.entity';
+import { User, DEFAULT_STEP } from '../entities/user.entity';
 import { UpdateUserJourneyDto } from './dto/update-user-journey.dto';
 
-const DEFAULT_STEP: User['userJourneyStep'] = 'deposit_usdc';
 
 @Injectable()
 export class UserJourneyService {

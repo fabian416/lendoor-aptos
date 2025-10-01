@@ -728,7 +728,7 @@ module lendoor::reserve {
 
     #[view]
     public fun exists_for<Coin0>(): bool {
-        // El “host” donde viven los singletons es el admin guardado en controller_config
+        // The “host” where the singletons live is the admin saved in controller_config
         let host = controller_config::host_addr();
         exists<ReserveCoinContainer<Coin0>>(host)
     }
@@ -739,7 +739,7 @@ module lendoor::reserve {
         reserve_conf: ReserveConfig,
         interest_rate_conf: InterestRateConfig
     ): bool acquires Reserves {
-        // Asegura que el singleton Reserves exista antes de crear la reserva específica.
+        // Ensures that the Reserves singleton exists before creating the specific reserve.
         init_if_needed(admin);
         if (exists_for<Coin0>()) {
             false

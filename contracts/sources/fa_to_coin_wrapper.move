@@ -20,13 +20,13 @@ module lendoor::fa_to_coin_wrapper {
     const EFA_SIGNER_DOES_NOT_EXIST: u64 = 4;
     const EAMOUNT_MISMATCH: u64 = 5;
 
-    // Resource account que custodiará el FA y el coin envuelto
+    // Resource account that will hold the FA and the wrapped coin
     struct FASigner has key, store {
         addr: address,
         cap: SignerCapability,
     }
 
-    // Estado por tipo envuelto
+    // State by wrapped type
     struct WrapperCoinInfo<phantom WCoin> has key {
         mint_capability: MintCapability<WCoin>,
         burn_capability: BurnCapability<WCoin>,
@@ -37,7 +37,7 @@ module lendoor::fa_to_coin_wrapper {
 
     // ---------- INIT ----------
 
-    /// Crea el resource account SOLO si todavía no existe (idempotente).
+    /// Creates the resource account ONLY if it does not exist yet (idempotent).
     public(friend) fun init_if_needed(account: &signer, seed: vector<u8>) {
         controller_config::assert_is_admin(signer::address_of(account));
         let admin = controller_config::admin_addr();
@@ -61,7 +61,7 @@ module lendoor::fa_to_coin_wrapper {
 
     // ---------- WRAP (FA -> Coin) ----------
 
-    /// Inicializa el CoinInfo para WCoin y lo asocia al FA **solo si aún no existe**.
+    /// Initializes the CoinInfo for WCoin and associates it with the FA **only if it does not exist yet**.
     public(friend) fun add_fa_if_needed<WCoin>(
         account: &signer,
         metadata: Object<Metadata>
@@ -70,7 +70,7 @@ module lendoor::fa_to_coin_wrapper {
         let admin = controller_config::admin_addr();
         assert!(exists<FASigner>(admin), EFA_SIGNER_DOES_NOT_EXIST);
 
-        // 🔧 IMPORTANTE: este if como statement termina con ';'
+        // 🔧 IMPORTANT: this if as a statement ends with ';'
         if (exists<WrapperCoinInfo<WCoin>>(admin)) { return; };
 
         let (symbol, name) = make_symbol_and_name_for_wrapped_coin(metadata);
@@ -170,9 +170,9 @@ module lendoor::fa_to_coin_wrapper {
         )
     }
 
-    // --- Aliases no-idempotentes (compat) ---
+    // --- Non-idempotent aliases (compat) ---
     public(friend) fun init(account: &signer) {
-        // Usa una seed por defecto; cambia la seed en cada re-deploy si es necesario
+        // Use a default seed; change the seed on each re-deploy if necessary
         init_if_needed(account, b"FASigner");
     }
 

@@ -212,7 +212,7 @@ module lendoor::controller {
 
     public entry fun init_wrapper_fa_signer(account: &signer) {
         {
-            // idempotente: si el resource account del wrapper ya existe, no hace nada
+            // idempotent: if the wrapper's resource account already exists, it does nothing
             fa_to_coin_wrapper::init_if_needed(account, b"FASigner");
         }
     }
@@ -397,7 +397,7 @@ module lendoor::controller {
         repay_only: bool,
     ) {
         assert!(amount > 0, ECONTROLLER_DEPOSIT_ZERO_AMOUNT);
-        // Lazy init (solo el dueño puede crear su Profile)
+        // Lazy init (only the owner can create their Profile)
         profile::ensure_for_signer(account);
         let addr = signer::address_of(account);
         deposit_for<Coin0>(account, profile_name, amount, addr, repay_only);

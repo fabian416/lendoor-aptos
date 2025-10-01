@@ -48,15 +48,15 @@ module lendoor::controller_config {
         if (!exists<ControllerConfig>(where_)) {
             move_to(account, ControllerConfig { admin, host: where_ });
         } else {
-            // Ya existe: valida que el admin coincida con quien llama,
-            // así no rompemos la configuración previa.
+            // Already exists: validate that the admin matches the caller,
+            // so we don't break the previous configuration.
             let cfg = borrow_global<ControllerConfig>(where_);
             assert!(cfg.admin == admin, ECONTROLLER_ADMIN_MISMATCH);
         }
     }
 
     public(friend) entry fun init_if_needed(account: &signer, admin: address) acquires ControllerConfig {
-        // Reusa la lógica idempotente de init_config.
+        // Reuse the idempotent logic of init_config.
         init_config(account, admin);
     }
 

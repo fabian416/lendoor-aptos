@@ -253,7 +253,7 @@ module lendoor::profile {
     /// Get the borrowing power that is still available, measured in dollars.
     public fun available_borrowing_power(user_addr: address): Decimal acquires Profile {
         let profile = borrow_global_mut<Profile>(user_addr);
-        // sin e-mode: usamos None
+        // without e-mode: we use None
         let profile_emode: Option<string::String> = option::none();
 
         let total_borrowed_value = get_adjusted_borrowed_value_fresh_for_profile(profile, &profile_emode);

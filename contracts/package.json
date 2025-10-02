@@ -13,6 +13,7 @@
     "move:init": "node ./scripts/move/init.js",
     "move:deposit_fa": "node ./scripts/move/deposit_fa.js",
     "move:withdraw_fa": "node ./scripts/move/withdraw_fa.js",
+    "move:borrow": "node ./scripts/move/borrow.js",
     "move:staging:clear": "node ./scripts/move/clear_staging.js",
     "move:upgrade": "node ./scripts/move/upgrade",
     "dev": "vite",

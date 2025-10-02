@@ -33,6 +33,7 @@ const hexFromUtf8 = (s) => "0x" + Buffer.from(String(s), "utf8").toString("hex")
 
   const TYPE_WUSDC     = `${pkgAddr}::wusdc::WUSDC`;
   const TYPE_LP_WUSDC  = `${pkgAddr}::reserve::LP<${TYPE_WUSDC}>`;
+  const faObj = need("VITE_FA_METADATA_OBJECT");
 
   // ===== CLI =====
   // node scripts/move/withdraw_fa.js AMOUNT allowBorrow profile
@@ -48,13 +49,18 @@ const hexFromUtf8 = (s) => "0x" + Buffer.from(String(s), "utf8").toString("hex")
   // ===== PRE =====
   console.log("\n=== PRE-ESTADO ===");
   try {
-    const balFA = viewJSON(
+    const faBal = viewJSON(
       `aptos move view --function-id 0x1::fungible_asset::balance ` +
-      `--args address:${signerAddr} address:${faMetaObj} --url ${url}`
+      `--args address:${signerAddr} object:${faObj} --url ${url}`
     );
-    console.log("FA balance:", balFA?.Result?.[0] ?? balFA);
-  } catch(e){ console.log("No pude leer balance FA (¿sin registro/balance?)."); }
-
+    console.log("FA balance (raw):", faBal?.Result?.[0] ?? faBal);
+    // Opcional: mostrar humano con 6 decimales
+    const dec = parseInt(process.env.VITE_WUSDC_DECIMALS || "6", 10);
+    const v = BigInt(faBal?.Result?.[0] || "0");
+    console.log("FA balance (human):", Number(v) / 10**dec);
+  } catch (e) {
+    console.log("No pude leer balance FA:", e?.message || e);
+  }
   try {
     const balLP = viewJSON(
       `aptos move view --function-id 0x1::coin::balance ` +

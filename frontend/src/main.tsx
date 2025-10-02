@@ -16,14 +16,14 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <WalletProvider>
         <MoveModuleProvider>
-          <UserJourneyProvider>
-            <UserProvider>
+          <UserProvider>
+            <UserJourneyProvider>
               <Suspense fallback={null}>
                 <App />
               </Suspense>
-            </UserProvider>
-          </UserJourneyProvider>
-          <Toaster richColors position="top-right" />
+              <Toaster richColors position="top-right" />
+            </UserJourneyProvider>
+          </UserProvider>
         </MoveModuleProvider>
       </WalletProvider>
     </BrowserRouter>

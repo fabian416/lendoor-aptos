@@ -61,22 +61,46 @@ export function UserProvider({ children }: UserProviderProps) {
     scoreDisplay: creditScoreDisplay,
     limitDisplay: creditLimitDisplay,
     borrowedDisplay,
-  } = useCreditLine({ pollMs: 15_000 })
-
-  // Exchange rates
-  const { display: seniorExchangeRateDisplay } = useSeniorExchangeRate()
-  const { display: juniorExchangeRateDisplay } = useJuniorExchangeRate()
-
-  // APY
-  const { displayAPY: seniorApyDisplay } = useSeniorYield()
-  const { displayAPY: juniorApyDisplay } = useJuniorYield()
+  } = useCreditLine()
 
   // Balances
   const { display: susdcDisplay } = useSusdcBalance()
   const { display: jusdcDisplay } = useJusdcBalance()
 
+  // Exchange rates
+  const { display: seniorExchangeRateDisplay } = useSeniorExchangeRate()
+  //const { display: juniorExchangeRateDisplay } = useJuniorExchangeRate()
+  const juniorExchangeRateDisplay = "1/1.000823"
+
   // Withdrawable
   const { display: seniorWithdrawAvailableDisplay } = useSeniorAvailableToWithdraw()
+  //const { display: juniorWithdrawAvailableDisplay } = useJuniorAvailableToWithdraw()
+  const juniorWithdrawAvailableDisplay = '—'
+
+  // APY
+  const seniorApyDisplay = '10%'
+  const juniorApyDisplay = '20%'
+
+
+  const maxBorrowDisplay = '7,550 USDC'
+  const borrowSubmitting = false
+  const borrowSubmit = async (amountInput: string): Promise<boolean> => {
+    // Simulate success; replace with real call later.
+    console.log('[MOCK] borrowSubmit ->', amountInput)
+    await new Promise((r) => setTimeout(r, 400))
+    return true
+  }
+
+
+
+  /*
+
+
+  // APY
+  const { displayAPY: seniorApyDisplay } = useSeniorYield()
+  const { displayAPY: juniorApyDisplay } = useJuniorYield()
+
+  // Withdrawable
   const { display: juniorWithdrawAvailableDisplay } = useJuniorAvailableToWithdraw()
 
   // Borrow
@@ -85,7 +109,7 @@ export function UserProvider({ children }: UserProviderProps) {
     submit: borrowSubmit,
     submitting: borrowSubmitting,
   } = useBorrow({ requireController: true })
-
+*/
   // Wallet (Aptos)
   const { account, connected } = useWallet()
   const wallet = React.useMemo(() => normalizeWallet(account?.address), [account?.address])

@@ -3,89 +3,152 @@
 import * as React from 'react'
 import { useAptos } from '@/providers/WalletProvider'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
-import { LENDOOR_CONTRACT, WUSDC_TYPE } from '@/lib/constants'
+import { JUSDC_TYPE } from '@/lib/constants'
 import { formatUSDCAmount2dp } from '@/lib/utils'
+import { shouldSkip, onSuccess, onError } from '@/lib/backoff'
 
-/** Try several common view names to read jUSDC (junior LP) balance */
-async function readJuniorBalance(
+/** Best-effort coin amount:
+ *  1) Try getAccountCoinAmount.
+ *  2) If it fails, try reading CoinStore directly and parse value.
+ *  3) If CoinStore doesn't exist -> return 0n (not an error).
+ */
+async function safeGetCoinAmount(
   aptos: any,
-  owner: string,
-): Promise<bigint | null> {
-  const fns = [
-    `${LENDOOR_CONTRACT}::junior::balance_of`,
-    `${LENDOOR_CONTRACT}::junior::lp_balance_of`,
-    `${LENDOOR_CONTRACT}::junior::balance_of_for`,
-  ]
-  for (const fn of fns) {
+  addr: string,
+  coinType: string
+): Promise<bigint> {
+  // 1) Primary path
+  try {
+    const amt = await aptos.getAccountCoinAmount({ accountAddress: addr, coinType })
+    return typeof amt === 'bigint' ? amt : BigInt(amt as any)
+  } catch (primaryErr: any) {
+    // 2) Fallback: read CoinStore
     try {
-      const out = await aptos.view({
-        payload: {
-          function: fn,
-          typeArguments: [WUSDC_TYPE],
-          functionArguments: [owner], // pass as string to satisfy TS
-        },
+      const res = await aptos.getAccountResource({
+        accountAddress: addr,
+        resourceType: `0x1::coin::CoinStore<${coinType}>`,
       })
-      const v = out?.[0]
-      if (v == null) continue
-      // Accept u64/u128 returned as string/number/bigint
-      if (typeof v === 'bigint') return v
-      if (typeof v === 'number') return BigInt(v)
-      if (typeof v === 'string') return BigInt(v)
-      // Some SDKs may wrap as object
-      if (typeof v === 'object' && 'value' in (v as any)) {
-        return BigInt((v as any).value)
+      // Parse common shapes from different SDKs
+      const data: any = (res as any)?.data ?? res
+      const raw =
+        data?.coin?.value ??
+        data?.coin?.value?.value ?? // some SDKs double-wrap
+        data?.value
+      if (raw == null) {
+        // If the resource exists but we cannot parse, bubble original error.
+        throw primaryErr
       }
-    } catch {
-      // try next candidate
+      return typeof raw === 'bigint' ? raw : BigInt(raw as any)
+    } catch (fallbackErr: any) {
+      // 3) If CoinStore does not exist -> treat as 0
+      const code = fallbackErr?.status ?? fallbackErr?.statusCode ?? fallbackErr?.status_code
+      const msg = String(fallbackErr?.message ?? '').toLowerCase()
+      const notFound = code === 404 || code === '404' || /not\s*found|does not exist|resource/i.test(msg)
+      if (notFound) return 0n
+      // Unknown failure
+      throw primaryErr
     }
   }
-  return null
 }
 
-/**
- * Reads the connected wallet's jUSDC (junior LP) balance from Move.
- * Keeps the same return shape as your original hook.
- */
 export function useJusdcBalance(pollMs = 10_000) {
   const { aptos } = useAptos()
   const { account } = useWallet()
 
-  const [raw, setRaw] = React.useState<bigint | null>(null)
-  const [display, setDisplay] = React.useState<string>('—')
+  const [raw, setRaw] = React.useState<bigint | null>(null)   // last good value; null = never loaded
+  const [display, setDisplay] = React.useState('—')           // UI string based on last good value
   const [loading, setLoading] = React.useState(false)
+  const [stale, setStale] = React.useState(false)             // true when last attempt failed but value is cached
+
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const runningRef = React.useRef(false)
+  const mountedRef = React.useRef(true)
+
+  const addr = account?.address ? String(account.address) : null
+  const key = React.useMemo(
+    () => `balance:${addr ?? 'unknown'}:${JUSDC_TYPE}`,
+    [addr]
+  )
+
+  const clearTimer = React.useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
 
   const read = React.useCallback(async () => {
-    const addr = account?.address ? String(account.address) : null
     if (!addr) {
+      // No connected account: reset visual state
       setRaw(null)
       setDisplay('—')
+      setStale(false)
       return
     }
+    if (runningRef.current) return
+    if (shouldSkip(key)) { // global backoff helper
+      // Short delay to re-check later
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => void read(), 5_000)
+      return
+    }
+
+    runningRef.current = true
     setLoading(true)
     try {
-      const bal = await readJuniorBalance(aptos, addr)
-      if (bal == null) {
-        setRaw(null)
-        setDisplay('—')
-        return
-      }
-      setRaw(bal)
-      const pretty = formatUSDCAmount2dp(bal) // j-shares use USDC-like decimals for UI
+      const amt = await safeGetCoinAmount(aptos, addr, JUSDC_TYPE)
+      if (!mountedRef.current) return
+
+      setRaw(amt)
+      const pretty = formatUSDCAmount2dp(amt)
       setDisplay(prev => (prev === pretty ? prev : pretty))
-    } catch {
-      setRaw(null)
-      setDisplay('—')
+      setStale(false)
+
+      // Normal polling cadence after success
+      const next = onSuccess(key, pollMs)
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => void read(), next)
+    } catch (e) {
+      if (!mountedRef.current) return
+      setStale(true)
+      // Keep last good display; only show '—' if we never had a value
+      if (raw == null) setDisplay('—')
+
+      // Error backoff cadence
+      const next = onError(key, e)
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => void read(), next)
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
+      runningRef.current = false
     }
-  }, [aptos, account?.address])
+  }, [aptos, addr, key, pollMs, raw])
 
+  // IMPORTANT: schedule must depend on `read` to avoid stale closure.
+  const schedule = React.useCallback((ms: number) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => void read(), ms)
+  }, [read])
+
+  // Kick off and cleanup
   React.useEffect(() => {
+    mountedRef.current = true
     void read()
-    if (!pollMs) return
-    const id = setInterval(() => void read(), pollMs)
-    return () => clearInterval(id)
-  }, [read, pollMs])
+    return () => {
+      mountedRef.current = false
+      clearTimer()
+    }
+  }, [read, clearTimer])
 
-  return { raw, display, loading, refresh: read }
+  // Reset when account changes
+  React.useEffect(() => {
+    clearTimer()
+    setLoading(true)
+    setStale(false)
+    setRaw(null)
+    setDisplay('—')
+    schedule(0) // run immediately with the new account
+  }, [addr, clearTimer, schedule])
+
+  return { raw, display, loading, stale, refresh: read }
 }

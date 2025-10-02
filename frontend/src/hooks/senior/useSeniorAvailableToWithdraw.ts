@@ -4,7 +4,7 @@ import * as React from 'react'
 import { useAptos } from '@/providers/WalletProvider'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { LENDOOR_CONTRACT, WUSDC_DECIMALS, WUSDC_TYPE } from '@/lib/constants'
-import { DECIMALS, toBigIntLoose, decRaw } from '@/lib/utils'
+import { DECIMALS, toBigIntLoose, decRaw, DEC_SCALE } from '@/lib/utils'
 
 type Options = { pollMs?: number }
 
@@ -14,97 +14,103 @@ type Diagnosis =
   | 'no-balance'
   | 'controller-or-disabled'
   | 'unknown'
-  
 
-/** Parse reserve_state payload into the minimal fields we need. */
+/** Senior LP coin type used in coin::balance. */
+const SENIOR_LP_TYPE = `${LENDOOR_CONTRACT}::reserve::LPCoin<${WUSDC_TYPE}>`
+
+/** Single place to call aptos.view with the right payload keys (snake_case). */
+async function view<T>(
+  aptos: any,
+  func: string,
+  typeArgs: string[] = [],
+  args: unknown[] = []
+): Promise<T | null> {
+  try {
+    // Aptos REST /v1/view expects snake_case keys: type_arguments & arguments
+    const out = await aptos.view({
+      payload: {
+        function: func,
+        type_arguments: typeArgs,
+        arguments: args,
+      },
+    })
+    return out as T
+  } catch {
+    return null
+  }
+}
+
+/** Minimal reserve_state we need to compute PPS and read config/cash. */
 function parseReserveState(v: unknown) {
-  if (!v || typeof v !== 'object') throw new Error('Bad state')
+  if (!v || typeof v !== 'object') throw new Error('bad reserve_state')
   const o = v as Record<string, any>
   return {
-    totalLp: toBigIntLoose(o.total_lp_supply),
-    cashU128: toBigIntLoose(o.total_cash_available),
-    initEx: decRaw(o.initial_exchange_rate),
-    reserveAmt: decRaw(o.reserve_amount),
-    borrowed: decRaw(o.total_borrowed),
-    cfg: o.reserve_config ?? {},
+    totalLp: toBigIntLoose(o.total_lp_supply),        // u128
+    cashU128: toBigIntLoose(o.total_cash_available),  // u128
+    initEx: decRaw(o.initial_exchange_rate),          // Decimal(1e9)
+    reserveAmt: decRaw(o.reserve_amount),             // Decimal(1e9)
+    borrowed: decRaw(o.total_borrowed),               // Decimal(1e9)
+    cfg: o.reserve_config ?? null,
   }
 }
 
-/** Parse profile_deposit tuple (u64 lp, u64 underlying). */
-function parseProfileDeposit(v: unknown): { lp: bigint; underlying: bigint } {
-  if (Array.isArray(v) && v.length >= 2) {
-    return { lp: toBigIntLoose(v[0]), underlying: toBigIntLoose(v[1]) }
-  }
-  // Some SDKs may wrap as object with numeric keys
-  if (v && typeof v === 'object') {
-    const o = v as any
-    if (0 in o && 1 in o) return { lp: toBigIntLoose(o[0]), underlying: toBigIntLoose(o[1]) }
-  }
-  throw new Error('Unexpected profile_deposit shape')
+/** Compute PPS in Decimal(1e9): tvl(1e9)/totalLp or initial if empty. */
+function computePpsScaled(st: ReturnType<typeof parseReserveState>): bigint {
+  if (st.totalLp === 0n) return st.initEx
+  const cashScaled = st.cashU128 * DEC_SCALE
+  const tvlScaled = st.borrowed + cashScaled - st.reserveAmt
+  if (tvlScaled <= 0n) return 0n
+  return tvlScaled / st.totalLp // still 1e9
 }
 
-
-/** Scale raw on-chain USDC units to UI units using DECIMALS. */
+/** Scale raw base units -> UI number with token decimals. */
 function toUi(raw: bigint, tokenDecimals: number): number | null {
   try {
-    const human = Number(raw) / 10 ** tokenDecimals
-    if (!Number.isFinite(human)) return null
-    const scale = Math.pow(10, tokenDecimals - DECIMALS)
-    return human * scale
+    const n = Number(raw) / 10 ** tokenDecimals
+    return Number.isFinite(n) ? n : null
   } catch {
     return null
   }
 }
 
 /**
- * Move adaptation of “available to withdraw” for senior (LP collateral → underlying).
- * Returns a soft cap: min(user-underlying, pool-cash), minus withdraw fee if configured.
+ * Senior "available to withdraw" (in underlying USDC) for the connected wallet.
+ * Soft cap = min(userUnderlying, poolCash), minus withdraw fee (if any).
+ * Avoids profile::profile_deposit to prevent 400s when profile doesn't exist.
+ * Uses snake_case payload to stop 400 from bad request payload shapes.
  */
 export function useSeniorAvailableToWithdraw({ pollMs = 30_000 }: Options = {}) {
   const { aptos } = useAptos()
   const { account } = useWallet()
-  const connectedAddress = account?.address
+  const addr = account?.address ? String(account.address) : null
 
-  const dec = WUSDC_DECIMALS
+  const tokenDecimals = WUSDC_DECIMALS
 
   const [rawUSDC, setRawUSDC] = React.useState<bigint | null>(null)
   const [uiAmount, setUiAmount] = React.useState<number | null>(null)
   const [diagnosis, setDiagnosis] = React.useState<Diagnosis>('unknown')
   const [loading, setLoading] = React.useState(false)
 
+  // Prevent double-run in React 18 StrictMode (dev).
+  const didInitRef = React.useRef(false)
+
   const read = React.useCallback(async () => {
-    if (!connectedAddress) return
+    if (!addr) {
+      setRawUSDC(null)
+      setUiAmount(null)
+      setDiagnosis('unknown')
+      return
+    }
+
     setLoading(true)
     try {
-      // 1) User position
-      const depOut = (await aptos.view({
-        payload: {
-          function: `${LENDOOR_CONTRACT}::profile::profile_deposit`,
-          typeArguments: [WUSDC_TYPE],
-          functionArguments: [connectedAddress],
-        },
-      })) as unknown[]
-      const deposit = parseProfileDeposit(depOut?.[0])
-
-      if (deposit.lp === 0n || deposit.underlying === 0n) {
-        setRawUSDC(0n)
-        setUiAmount(0)
-        setDiagnosis('no-balance')
-        return
-      }
-
-      // 2) Reserve state (cash, config)
-      const stateOut = (await aptos.view({
-        payload: {
-          function: `${LENDOOR_CONTRACT}::reserve::reserve_state`,
-          typeArguments: [WUSDC_TYPE],
-          functionArguments: [],
-        },
-      })) as unknown[]
-      const st = parseReserveState(stateOut?.[0])
+      // 1) Reserve state (should be a #[view] in your module).
+      const stateOut = await view<unknown[]>(aptos, `${LENDOOR_CONTRACT}::reserve::reserve_state`, [WUSDC_TYPE], [])
+      if (!stateOut) throw new Error('reserve_state view failed')
+      const st = parseReserveState(stateOut[0])
 
       const allowRedeem =
-        !!(st.cfg?.allow_redeem ?? st.cfg?.['allow_redeem'])
+        st.cfg && typeof st.cfg.allow_redeem === 'boolean' ? Boolean(st.cfg.allow_redeem) : true
       if (!allowRedeem) {
         setRawUSDC(0n)
         setUiAmount(0)
@@ -112,38 +118,80 @@ export function useSeniorAvailableToWithdraw({ pollMs = 30_000 }: Options = {}) 
         return
       }
 
-      // 3) Soft cap by liquidity: min(userUnderlying, cash)
-      const cash = st.cashU128 // u128 in base units
-      const userAssets = deposit.underlying // u64 in base units
-      const soft = userAssets < cash ? userAssets : BigInt(cash)
+      // 2) Check if LP is registered and then read LP balance (both are non-aborting views).
+      const regOut = await view<unknown[]>(aptos, '0x1::coin::is_account_registered', [SENIOR_LP_TYPE], [addr])
+      const isReg = Array.isArray(regOut) ? Boolean(regOut[0]) : false
+      if (!isReg) {
+        setRawUSDC(0n)
+        setUiAmount(0)
+        setDiagnosis('no-balance')
+        return
+      }
 
-      // 4) Apply withdraw fee if any (stored in "hundredth bips" → millionths)
-      const feeMillionthRaw = st.cfg?.withdraw_fee_hundredth_bips ?? 0
-      const feeMillionth = typeof feeMillionthRaw === 'object'
-        ? toBigIntLoose((feeMillionthRaw as any).value ?? 0)
-        : toBigIntLoose(feeMillionthRaw)
-      const deliver =
-        soft - (soft * feeMillionth) / 1_000_000n
+      const balOut = await view<unknown[]>(aptos, '0x1::coin::balance', [SENIOR_LP_TYPE], [addr])
+      if (!balOut) throw new Error('coin::balance view failed')
+      const lp = toBigIntLoose(balOut[0]) // u64
+
+      if (lp === 0n) {
+        setRawUSDC(0n)
+        setUiAmount(0)
+        setDiagnosis('no-balance')
+        return
+      }
+
+      // 3) Convert LP -> underlying using PPS; soft cap by pool cash.
+      const ppsScaled = computePpsScaled(st) // 1e9
+      if (ppsScaled === 0n) {
+        setRawUSDC(0n)
+        setUiAmount(0)
+        setDiagnosis('unknown')
+        return
+      }
+
+      const userUnderlying = (lp * ppsScaled) / DEC_SCALE // base units
+      const poolCash = st.cashU128 // base units
+      const soft = userUnderlying < poolCash ? userUnderlying : poolCash
+
+      if (soft === 0n) {
+        setRawUSDC(0n)
+        setUiAmount(0)
+        setDiagnosis(poolCash === 0n ? 'no-liquidity' : 'no-balance')
+        return
+      }
+
+      // 4) Withdraw fee (hundredth bips => millionths), if configured.
+      let feeMillionth = 0n
+      if (st.cfg && 'withdraw_fee_hundredth_bips' in st.cfg) {
+        const raw = (st.cfg as any).withdraw_fee_hundredth_bips
+        feeMillionth = typeof raw === 'object' && raw != null && 'value' in raw
+          ? toBigIntLoose((raw as any).value)
+          : toBigIntLoose(raw)
+      }
+      const deliver = soft - (soft * feeMillionth) / 1_000_000n
 
       setRawUSDC(deliver)
-      setUiAmount(toUi(deliver, dec))
-      if (st.cashU128 === 0n) setDiagnosis('no-liquidity')
-      else if (deliver > 0n) setDiagnosis('ok')
-      else setDiagnosis('unknown')
+      setUiAmount(toUi(deliver, tokenDecimals))
+      setDiagnosis(deliver > 0n ? 'ok' : (poolCash === 0n ? 'no-liquidity' : 'unknown'))
     } catch {
+      // Swallow errors; UI stays stable and we avoid noisy logs.
       setRawUSDC(0n)
       setUiAmount(0)
       setDiagnosis('unknown')
     } finally {
       setLoading(false)
     }
-  }, [aptos, connectedAddress, dec])
+  }, [aptos, addr, tokenDecimals])
 
+  // One interval only (even under StrictMode).
   React.useEffect(() => {
-    void read()
-    if (!pollMs) return
-    const id = setInterval(() => void read(), pollMs)
-    return () => clearInterval(id)
+    if (!didInitRef.current) {
+      didInitRef.current = true
+      void read()
+      if (pollMs) {
+        const id = setInterval(() => void read(), pollMs)
+        return () => clearInterval(id)
+      }
+    }
   }, [read, pollMs])
 
   const display =
@@ -154,5 +202,5 @@ export function useSeniorAvailableToWithdraw({ pollMs = 30_000 }: Options = {}) 
           maximumFractionDigits: DECIMALS,
         }).format(uiAmount)} USDC`
 
-  return { rawUSDC, uiAmount, decimals: dec, display, loading, refresh: read, diagnosis }
+  return { rawUSDC, uiAmount, decimals: tokenDecimals, display, loading, refresh: read, diagnosis }
 }

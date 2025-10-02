@@ -2,12 +2,15 @@
 
 import * as React from 'react'
 import { useAptos } from '@/providers/WalletProvider'
-import { LENDOOR_CONTRACT, WUSDC_DECIMALS, WUSDC_TYPE } from '@/lib/constants'
+import { LENDOOR_CONTRACT, WUSDC_TYPE } from '@/lib/constants'
 import { decRaw } from '@/lib/utils'
 
 type Options = { pollMs?: number }
 
-/** Try a few common view fns to read junior PPS in Decimal(1e9) scale. */
+/**
+ * Try a few common view functions to read junior PPS in Decimal(1e9) scale.
+ * Returns the scaled integer (bigint) or null if none is available.
+ */
 async function readJuniorPpsScaled(aptos: any): Promise<bigint | null> {
   const candidates = [
     `${LENDOOR_CONTRACT}::junior::pps_scaled`,
@@ -21,10 +24,10 @@ async function readJuniorPpsScaled(aptos: any): Promise<bigint | null> {
         payload: { function: fn, typeArguments: [WUSDC_TYPE], functionArguments: [] },
       })
       const v = out?.[0]
-      const scaled = v == null ? 0n : decRaw(v)
+      const scaled = v == null ? 0n : decRaw(v) // Decimal(1e9)
       if (scaled > 0n) return scaled
     } catch {
-      // try next candidate
+      // ignore and try next candidate
     }
   }
   return null
@@ -45,12 +48,11 @@ export function useJuniorExchangeRate({ pollMs = 30_000 }: Options = {}) {
       const ppsScaled = await readJuniorPpsScaled(aptos) // Decimal(1e9)
       if (!ppsScaled) {
         setRate(null)
-        return
+      } else {
+        // Convert Decimal(1e9) to tokens; do NOT divide by USDC decimals again.
+        const tokensPerShare = Number(ppsScaled) / 1e9
+        setRate(Number.isFinite(tokensPerShare) ? tokensPerShare : null)
       }
-      // Convert Decimal(1e9) → base units → token units
-      const baseUnitsPerShare = Number(ppsScaled) / 1e9
-      const tokensPerShare = baseUnitsPerShare / 10 ** WUSDC_DECIMALS
-      setRate(Number.isFinite(tokensPerShare) ? tokensPerShare : null)
     } catch {
       setRate(null)
     } finally {

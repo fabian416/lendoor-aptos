@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useAptos } from '@/providers/WalletProvider'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { DECIMALS, parseUnitsAptos } from '@/lib/utils'
-import { useSeniorAvailableToWithdraw } from './useSeniorAvailableToWithdraw'
+import { useSeniorAvailableToWithdraw } from '@/hooks/senior/useSeniorAvailableToWithdraw'
 import { useUserJourney } from '@/providers/UserJourneyProvider'
 import { LENDOOR_CONTRACT, WUSDC_TYPE } from '@/lib/constants'
 

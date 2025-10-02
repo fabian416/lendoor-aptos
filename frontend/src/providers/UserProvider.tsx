@@ -69,8 +69,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
   // Exchange rates
   const { display: seniorExchangeRateDisplay } = useSeniorExchangeRate()
-  //const { display: juniorExchangeRateDisplay } = useJuniorExchangeRate()
-  const juniorExchangeRateDisplay = "1/1.000823"
+  const { display: juniorExchangeRateDisplay } = useJuniorExchangeRate()
 
   // Withdrawable
   const { display: seniorWithdrawAvailableDisplay } = useSeniorAvailableToWithdraw()

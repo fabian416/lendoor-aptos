@@ -169,11 +169,6 @@ module lendoor::reserve {
         reserve_details(std_type<CoinType>())
     }
 
-    #[test_only]
-    public fun has_initiated(): bool {
-        exists<Reserves>(controller_config::host_addr())
-    }
-
     public(friend) fun create<Coin0>(
         account: &signer,
         initial_exchange_rate: Decimal,
@@ -244,12 +239,6 @@ module lendoor::reserve {
         }
     }
 
-    // This is a helper method to set `ReserveDetails` to any arbitrary state to enable testing for interest accumulation.
-    #[test_only]
-    public fun update_reserve_details_for_testing<Coin0>(reserve_details: ReserveDetails) acquires Reserves {
-        update_reserve_details(type_info<Coin0>(), reserve_details);
-    }
-
     public(friend) fun update_reserve_config<Coin0>(reserve_config: ReserveConfig) acquires Reserves {
         let new_reserve_details = reserve_details(type_info<Coin0>());
         reserve_details::update_reserve_config(&mut new_reserve_details, reserve_config);
@@ -265,61 +254,6 @@ module lendoor::reserve {
     /// The key that is stored in the map.
     public fun type_info<Coin0>(): TypeInfo {
         std_type<Coin0>()
-    }
-
-    #[test_only]
-    public fun update_reserve_stats_with_mock_borrow<Coin0>(
-        details: ReserveDetails,
-        borrow_amount: u64, 
-        borrow_share_amount: Decimal
-    ) acquires Reserves {
-        let new_total_borrowed = decimal::add(
-            reserve_details::total_borrow_amount(&mut details), 
-            decimal::from_u64(borrow_amount)
-        );
-        let new_total_borrowed_share = decimal::add(
-            reserve_details::total_borrowed_share(&mut details), 
-            borrow_share_amount
-        );
-
-        reserve_details::set_total_borrow_amount(&mut details, new_total_borrowed);
-        reserve_details::set_total_borrow_share(&mut details, new_total_borrowed_share);
-
-        update_reserve_details(type_info<Coin0>(), details);
-    }
-
-    #[test_only]
-    public fun update_reserve_stats_with_mock_reserve_amount<Coin0>(
-        details: ReserveDetails, 
-        reserve_amount: Decimal,
-    ) acquires Reserves {
-        reserve_details::set_reserve_amount(&mut details, reserve_amount);
-        update_reserve_details(type_info<Coin0>(), details);
-    }
-
-    #[test_only]
-    public fun total_borrow_amount(reserve_type_info: TypeInfo): Decimal acquires Reserves {
-        reserve_details::total_borrow_amount(&mut reserve_details(reserve_type_info))
-    }
-
-    #[test_only]
-    public fun total_borrow_share(reserve_type_info: TypeInfo): Decimal acquires Reserves {
-        reserve_details::total_borrowed_share(&reserve_details(reserve_type_info))
-    }
-
-    #[test_only]
-    public fun total_cash_available(reserve_type_info: TypeInfo): u128 acquires Reserves {
-        reserve_details::total_cash_available(&reserve_details(reserve_type_info))
-    }
-
-    #[test_only]
-    public fun reserve_amount(reserve_type_info: TypeInfo): Decimal acquires Reserves {
-        reserve_details::reserve_amount(&mut reserve_details(reserve_type_info))
-    }
-
-    #[test_only]
-    public fun reserve_interest_config(reserve_type_info: TypeInfo): InterestRateConfig acquires Reserves {
-        reserve_details::interest_rate_config(&reserve_details(reserve_type_info))
     }
 
     public fun reserve_config(reserve_type_info: TypeInfo): ReserveConfig acquires Reserves {
@@ -589,21 +523,19 @@ module lendoor::reserve {
     /// Creates the symbol and name of an LP token.
     public fun make_symbol_and_name_for_lp_token<Coin0>(): (string::String, string::String) {
         let symbol0 = coin::symbol<Coin0>();
-        let symbol = vector::empty();
-        vector::append(&mut symbol, b"A");
-        vector::append(&mut symbol, *string::bytes(&symbol0));
-        let symbol_str = string::utf8(symbol);
+        let sym = vector::empty();
+        vector::append(&mut sym, b"L");                   
+        vector::append(&mut sym, *string::bytes(&symbol0));
+        let sym_str = string::utf8(sym);
 
         let name0 = coin::name<Coin0>();
-        let name = b"Aries ";
+        let name = b"Lendoor ";                           
         vector::append(&mut name, *string::bytes(&name0));
-        vector::append(&mut name, b" LP Token");
+        vector::append(&mut name, b" Senior LP");         
         let name_str = string::utf8(name);
 
         (
-            // Token symbol should be shorter than 10 chars
-            string::sub_string(&symbol_str, 0, math64::min(string::length(&symbol_str), 10)), 
-            // Token name should be shorter than 32 chars
+            string::sub_string(&sym_str, 0, math64::min(string::length(&sym_str), 10)),
             string::sub_string(&name_str, 0, math64::min(string::length(&name_str), 32))
         )
     }
@@ -687,8 +619,6 @@ module lendoor::reserve {
 
         emit_sync_reserve_detail_event<Coin0>(&reserve_details(type_info<Coin0>()));
     }
-
-
 
     public(friend) fun burn_lp<Coin0>(
         lp: Coin<LP<Coin0>>

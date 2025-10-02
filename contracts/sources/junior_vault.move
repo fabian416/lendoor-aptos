@@ -3,11 +3,13 @@ module lendoor::junior {
     use std::option::{Self};
     use std::string;
     use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
+    use lendoor::controller_config;
     
     use lendoor_config::utils;
     use lendoor::reserve::{Self as senior, LP};
     
     friend lendoor::controller;
+    const DEC_SCALE: u128 = 1_000_000_000;
 
     struct S<phantom Coin0> has store, drop, key {}
 
@@ -20,6 +22,11 @@ module lendoor::junior {
     }
 
     public entry fun init_for<Coin0>(admin: &signer) {
+        let owner = signer::address_of(admin);
+        if (exists<JVault<Coin0>>(owner)) {
+            return;
+        };
+
         let symbol = string::utf8(b"jUSD");
         let name = string::utf8(b"Junior USD Shares");
 
@@ -31,7 +38,7 @@ module lendoor::junior {
             true
         );
         move_to(admin, JVault<Coin0> {
-            admin: signer::address_of(admin),
+            admin: owner,
             lp_box: coin::zero<LP<Coin0>>(),
             s_mint: mint,
             s_burn: burn,
@@ -40,7 +47,8 @@ module lendoor::junior {
     }
 
     public entry fun deposit<Coin0>(user: &signer, amount_lp: u64) acquires JVault {
-        let v = borrow_global_mut<JVault<Coin0>>(signer::address_of(user));
+        let owner = controller_config::admin_addr();
+        let v = borrow_global_mut<JVault<Coin0>>(owner);
         let lp_in = coin::withdraw<LP<Coin0>>(user, amount_lp);
 
         let total_shares_opt = coin::supply<S<Coin0>>();
@@ -65,7 +73,8 @@ module lendoor::junior {
 
 
     public entry fun withdraw<Coin0>(user: &signer, shares: u64) acquires JVault {
-        let v = borrow_global_mut<JVault<Coin0>>(signer::address_of(user));
+        let owner = controller_config::admin_addr();
+        let v = borrow_global_mut<JVault<Coin0>>(owner);
 
         let s = coin::withdraw<S<Coin0>>(user, shares);
         utils::burn_coin<S<Coin0>>(s, &v.s_burn);
@@ -110,5 +119,27 @@ module lendoor::junior {
         let lp = coin::extract<LP<Coin0>>(&mut v.lp_box, burn_lp_amt);
         senior::burn_lp<Coin0>(lp);
         burn_lp_amt
+    }
+
+    #[view]
+    public fun pps_scaled<Coin0>(): u128 acquires JVault {
+        let owner = controller_config::admin_addr();
+        if (!exists<JVault<Coin0>>(owner)) {
+            return DEC_SCALE;
+        };
+
+        let v = borrow_global<JVault<Coin0>>(owner);
+
+        let total_lp: u64 = coin::value(&v.lp_box);
+
+        let supply_opt = coin::supply<S<Coin0>>();
+        let total_shares: u128 =
+            if (option::is_some(&supply_opt)) { *option::borrow(&supply_opt) } else { 0 };
+
+        if (total_lp == 0 || total_shares == 0) {
+            DEC_SCALE
+        } else {
+            ((total_lp as u128) * DEC_SCALE) / total_shares
+        }
     }
 }

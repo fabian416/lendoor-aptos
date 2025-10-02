@@ -1,5 +1,6 @@
 module lendoor::credit_manager {
     use std::signer;
+    use std::vector;
     use aptos_std::type_info::{Self as type_info, TypeInfo};
     use aptos_std::simple_map::{Self as ref_map, SimpleMap};
     
@@ -168,5 +169,96 @@ module lendoor::credit_manager {
                 *itab::borrow<TypeInfo, u64>(&book.usage, &asset)
             }
         }
+    }
+
+    // =======================
+    //  Credit Score & Lines (paralelo al libro principal)
+    //  - score: u8 (0..255)
+    //  - limit por AssetType reutiliza admin_set_limit existente
+    // =======================
+
+    const DEFAULT_SCORE: u8 = 0;
+
+    /// Recurso global @lendoor: score por usuario (separado para no romper layout).
+    struct ScoreBook has key {
+        scores: SimpleMap<address, u8>,
+    }
+
+    /// Inicialización idempotente del libro de scores
+    public entry fun init_scores(admin: &signer) {
+        controller_config::assert_is_admin(signer::address_of(admin));
+        if (!exists<ScoreBook>(@lendoor)) {
+            move_to(admin, ScoreBook {
+                scores: ref_map::create<address, u8>(),
+            });
+        }
+    }
+
+    /// Admin: setea el score de un usuario en [0..255]
+    public entry fun admin_set_score(
+        admin: &signer,
+        user: address,
+        score: u8
+    ) acquires ScoreBook {
+        controller_config::assert_is_admin(signer::address_of(admin));
+        assert!(exists<ScoreBook>(@lendoor), E_NOT_INITIALIZED);
+
+        let sb = borrow_global_mut<ScoreBook>(@lendoor);
+        if (ref_map::contains_key<address, u8>(&sb.scores, &user)) {
+            let r = ref_map::borrow_mut<address, u8>(&mut sb.scores, &user);
+            *r = score;
+        } else {
+            ref_map::add<address, u8>(&mut sb.scores, user, score);
+        };
+    }
+
+    #[view]
+    public fun get_score(user: address): u8 acquires ScoreBook {
+        if (!exists<ScoreBook>(@lendoor)) {
+            DEFAULT_SCORE
+        } else {
+            let sb = borrow_global<ScoreBook>(@lendoor);
+            if (ref_map::contains_key<address, u8>(&sb.scores, &user)) {
+                *ref_map::borrow<address, u8>(&sb.scores, &user)
+            } else {
+                DEFAULT_SCORE
+            }
+        }
+    }
+
+    /// Admin: set score + per-asset limit (similar a setLine() de Solidity)
+    public entry fun admin_set_line<AssetType>(
+        admin: &signer,
+        user: address,
+        score: u8,
+        limit: u64
+    ) acquires GlobalCredit, ScoreBook {
+        // Set score
+        admin_set_score(admin, user, score);
+        // Set per-asset limit (reutiliza la función existente)
+        admin_set_limit<AssetType>(admin, user, limit);
+    }
+
+    /// Admin: batch para múltiples usuarios (paralelo a batchSetLines)
+    public entry fun admin_batch_set_lines<AssetType>(
+        admin: &signer,
+        users: vector<address>,
+        scores: vector<u8>,
+        limits: vector<u64>
+    ) acquires GlobalCredit, ScoreBook {
+        controller_config::assert_is_admin(signer::address_of(admin));
+        assert!(exists<ScoreBook>(@lendoor), E_NOT_INITIALIZED);
+        assert!(vector::length(&users) == vector::length(&scores), E_LIMIT_EXCEEDED);
+        assert!(vector::length(&users) == vector::length(&limits), E_LIMIT_EXCEEDED);
+
+        let n = vector::length(&users);
+        let i: u64 = 0;
+        while (i < n) {
+            let addr = *vector::borrow(&users, i);
+            let sc   = *vector::borrow(&scores, i);
+            let lim  = *vector::borrow(&limits, i);
+            admin_set_line<AssetType>(admin, addr, sc, lim);
+            i = i + 1;
+        };
     }
 }

@@ -126,27 +126,16 @@ module lendoor::reserve_details {
         accrue_interest(reserve_details);
         reserve_details.total_borrowed
     }
-    #[test_only]
-    public fun set_total_borrow_amount(reserve_details: &mut ReserveDetails, new_amount: Decimal) {
-        reserve_details.total_borrowed = new_amount;
-    }
 
     public fun total_borrowed_share(reserve_details: &ReserveDetails): Decimal {
         reserve_details.total_borrowed_share
-    }
-    #[test_only]
-    public fun set_total_borrow_share(reserve_details: &mut ReserveDetails, new_amount: Decimal) {
-        reserve_details.total_borrowed_share = new_amount;
     }
 
     public fun reserve_amount(reserve_details: &mut ReserveDetails): Decimal {
         accrue_interest(reserve_details);
         reserve_details.reserve_amount
     }
-    #[test_only]
-    public fun set_reserve_amount(reserve_details: &mut ReserveDetails, new_amount: Decimal) {
-        reserve_details.reserve_amount = new_amount;
-    }
+
 
     public fun reserve_amount_raw(reserve_details: &ReserveDetails): Decimal {
         reserve_details.reserve_amount
@@ -337,11 +326,6 @@ module lendoor::reserve_details {
             cash_plus_borrows, 
             reserve_details.reserve_amount
         )
-    }
-
-    #[test_only]
-    public fun get_exchange_rate(reserve_details: &mut ReserveDetails): Decimal {
-        get_underlying_amount_from_lp_amount_frac(reserve_details, 1)
     }
 
     public fun get_underlying_amount_from_lp_amount_frac(

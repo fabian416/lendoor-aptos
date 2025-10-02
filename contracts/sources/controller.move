@@ -274,18 +274,6 @@ module lendoor::controller {
         };
     }
 
-    #[test_only]
-    public entry fun add_reserve_for_test<Coin0>(admin: &signer) {
-        controller_config::assert_is_admin(signer::address_of(admin));
-        reserve::create<Coin0>(
-            admin,
-            decimal::one(),
-            reserve_config::default_test_config(),
-            interest_rate_config::default_config()
-        );
-        tranche_manager::init_for<Coin0>(admin)
-    }
-
     /// Register the user and also create a default `Profile` with the given name.
     /// We requires that a name is given instead of a default name such as "main" because it might be
     /// possible for user to already have a `ResourceAccount` that collides with our default name.

@@ -7,13 +7,31 @@ import { WUSDC_TYPE } from '@/lib/constants'
 import { formatUSDCAmount2dp } from '@/lib/utils'
 
 /**
- * Reads connected wallet's WUSDC coin balance (Move coin).
- * Strategy:
- * 1) aptos.getAccountCoinAmount (fast path)
- * 2) fallback: read CoinStore<...> resource
- *  - 404 => treat as 0
- *  - 429 => keep previous (don't thrash UI)
+ * Lee el balance del WUSDC del usuario (COIN o FA).
+ * Estrategia:
+ * - Si WUSDC_TYPE es address "0x..." (sin "::") => FA: getAccountCoinAmount({ faMetadataAddress })
+ * - Si WUSDC_TYPE es "0x..::mod::Struct"        => COIN:
+ *     1) (rápido) getAccountCoinAmount({ coinType })
+ *     2) (ledger) getAccountResource CoinStore<T>  (404 => 0, 429 => conserva UI)
+ *     3) (opcional) indexer getAccountCoinsData
  */
+
+type MaybeAddr = string | { toStringLong?: () => string; toString?: () => string }
+const addrToString = (a?: MaybeAddr) =>
+  !a ? '' : typeof a === 'string' ? a : a.toStringLong?.() ?? a.toString?.() ?? ''
+
+// COIN simple: "0x..::mod::Struct" (sin genéricos)
+function isSimpleCoinType(t: string): t is `${string}::${string}::${string}` {
+  return !t.includes('<') && !t.includes('>') && t.split('::').length === 3
+}
+
+// FA metadata: "0x..." (sin "::")
+const isFaMetadata = (t: string) => t.startsWith('0x') && !t.includes('::')
+
+// Para satisfacer el typing del SDK con CoinStore<...>
+type StructId = `${string}::${string}::${string}`
+const asStructId = (s: string) => s as unknown as StructId
+
 export function useSusdcBalance(pollMs = 15_000) {
   const { aptos } = useAptos()
   const { account } = useWallet()
@@ -21,17 +39,11 @@ export function useSusdcBalance(pollMs = 15_000) {
   const [raw, setRaw] = React.useState<bigint | null>(null)
   const [display, setDisplay] = React.useState<string>('—')
   const [loading, setLoading] = React.useState(false)
-
-  // Prevent overlapping requests (helps with rate limits)
   const inFlightRef = React.useRef(false)
 
   const read = React.useCallback(async () => {
-    const addr = account?.address
-    if (!addr) {
-      setRaw(null)
-      setDisplay('—')
-      return
-    }
+    const addr = addrToString(account?.address)
+    if (!addr) { setRaw(null); setDisplay('—'); return }
     if (inFlightRef.current) return
     inFlightRef.current = true
     setLoading(true)
@@ -39,38 +51,55 @@ export function useSusdcBalance(pollMs = 15_000) {
     try {
       let balance: bigint | null = null
 
-      // -------- try #1: getAccountCoinAmount (coin API) --------
-      try {
-        const amt = await aptos.getAccountCoinAmount({
-          accountAddress: addr,
-          coinType: WUSDC_TYPE,
-        })
-        balance = typeof amt === 'bigint' ? amt : BigInt(amt as unknown as string)
-      } catch (e: any) {
-        // fallthrough → try #2
-      }
-
-      // -------- try #2: read CoinStore<...> directly --------
-      if (balance == null) {
-        const storeType = `0x1::coin::CoinStore<${WUSDC_TYPE}>` as const
+      if (isFaMetadata(WUSDC_TYPE)) {
+        // ========= FA (no hay CoinStore) =========
         try {
-          const res = await aptos.getAccountResource({
+          const amt = await aptos.getAccountCoinAmount({
             accountAddress: addr,
-            resourceType: storeType,
+            faMetadataAddress: WUSDC_TYPE,
           })
-          const rawVal = (res as any)?.data?.coin?.value
-          balance = rawVal != null ? BigInt(rawVal) : 0n
-        } catch (e: any) {
-          const msg = String(e?.message ?? e?.status ?? '')
-          if (msg.includes('404')) {
-            // No CoinStore yet => 0 balance
-            balance = 0n
-          } else if (msg.includes('429')) {
-            // Rate limited: keep previous UI, don't flip to "—"
-            return
-          } else {
-            // Unknown error: keep previous (don't nuke UI)
-            return
+          balance = typeof amt === 'bigint' ? amt : BigInt(String(amt))
+        } catch {
+          // Si falla el indexer de FA, no hay ledger fallback → no pisar UI
+          return
+        }
+      } else {
+        // ========= COIN =========
+
+        // 1) Fast path: coin simple
+        if (isSimpleCoinType(WUSDC_TYPE)) {
+          try {
+            const amt = await aptos.getAccountCoinAmount({
+              accountAddress: addr,
+              coinType: WUSDC_TYPE,
+            })
+            balance = typeof amt === 'bigint' ? amt : BigInt(String(amt))
+          } catch { /* sigue a CoinStore */ }
+        }
+
+        // 2) Ledger: CoinStore<T> (sirve también si WUSDC_TYPE tuviera genéricos)
+        if (balance == null) {
+          try {
+            const res = await aptos.getAccountResource({
+              accountAddress: addr,
+              resourceType: asStructId(`0x1::coin::CoinStore<${WUSDC_TYPE}>`),
+            })
+            const rawVal = (res as any)?.data?.coin?.value
+            balance = rawVal != null ? BigInt(rawVal) : 0n
+          } catch (e: any) {
+            const msg = String(e?.message ?? e?.status ?? '')
+            if (msg.includes('404')) {
+              // 3) Opcional: indexer (puede estar atrasado unos segs)
+              try {
+                const coins = await aptos.getAccountCoinsData({ accountAddress: addr } as any)
+                const row = (coins as any[])?.find(c => c?.coin_type === WUSDC_TYPE)
+                balance = row ? BigInt(String(row.amount ?? '0')) : 0n
+              } catch { balance = 0n }
+            } else if (msg.includes('429')) {
+              return // rate limit: conserva UI
+            } else {
+              return // otro error: no pisar UI
+            }
           }
         }
       }

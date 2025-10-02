@@ -1,52 +1,64 @@
 'use client'
 
 import * as React from 'react'
-import { Contract } from 'ethers'
-import { useContracts } from '@/providers/ContractsProvider'
+import { useAptos } from '@/providers/WalletProvider'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
+import { LENDOOR_CONTRACT, WUSDC_DECIMALS, WUSDC_TYPE } from '@/lib/constants'
+import { decRaw, toBigIntLoose } from '@/lib/utils'
+import type { FQName } from '@/types/aptos'
 
-const CLM_ABI = [
-  'function scoreOf(address) view returns (uint8)',
-  'function creditLimit(address) view returns (uint256)',
-  'event LineSet(address indexed account, uint8 score, uint256 limit)',
-  'event LineCleared(address indexed account)',
-] as const
+type Options = { pollMs?: number }
 
-// Minimal RiskManager ABI — includes two common getter names for CLM
-const RM_ABI = [
-  'function creditLimitManager() view returns (address)',
-  'function clm() view returns (address)',
-] as const
-
-// Minimal EVault ABI fragment to read user debt
-const EVAULT_DEBT_ABI = [
-  'function debtOf(address) view returns (uint256)',
-] as const
-
-type Options = {
-  /** ms between reads; 0 disables polling */
-  pollMs?: number
-}
-
-/** Format asset units (default 6 decimals) with NO fractional part, thousand separators. */
+/** Integer formatting: cut decimals, add thousands separators. */
 function formatUnits0(amount: bigint, decimals = 6): string {
   const base = 10n ** BigInt(decimals)
-  const whole = amount / base // truncates toward zero
-  const s = whole.toString()
-  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  const whole = amount / base
+  return whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
-/**
- * Hook to read the user's credit line from the CLM and expose:
- * - scoreRaw: number | null           (0..255)
- * - scoreDisplay: string              ("—" | "123/255")
- * - limitRaw: bigint | null           (in asset base units)
- * - limitDisplay: string              ("—/—" | "X / Y USDC")  // borrowed / limit, no decimals
- * - borrowedRaw: bigint | null        (in asset base units)
- * - borrowedDisplay: string           ("—" | "X")
- */
-export function useCreditLine({ pollMs = 15_000 }: Options = {}) {
-  const { evault, evaultJunior, connectedAddress } = useContracts()
+/** Try a list of view fns until one succeeds; returns bigint or null. */
+async function tryViewsForBigint(
+  aptos: any,
+  fns: readonly FQName[],
+  args: any[],
+  typeArgMode: 'withCoin' | 'noCoin' | 'both' = 'both',
+): Promise<bigint | null> {
+  const runOne = async (fn: FQName, typeArguments: string[]) => {
+    const out = await aptos.view({
+      payload: { function: fn, typeArguments, functionArguments: args },
+    })
+    const v = out?.[0]
+    if (v == null) return null
+    // Handle u64/u128 and Decimal-like structs
+    try {
+      if (typeof v === 'object' && !Array.isArray(v)) return decRaw(v)
+      return toBigIntLoose(v)
+    } catch {
+      return null
+    }
+  }
 
+  for (const fn of fns) {
+    try {
+      if (typeArgMode === 'withCoin' || typeArgMode === 'both') {
+        const val = await runOne(fn, [WUSDC_TYPE])
+        if (val != null) return val
+      }
+      if (typeArgMode === 'noCoin' || typeArgMode === 'both') {
+        const val = await runOne(fn, [])
+        if (val != null) return val
+      }
+    } catch { /* keep trying */ }
+  }
+  return null
+}
+
+export function useCreditLine({ pollMs = 15_000 }: Options = {}) {
+  const { aptos } = useAptos()
+  const { account } = useWallet()
+  const owner = account?.address?.toString() // normalize to string
+
+  // Same outward API as your EVM hook
   const [clmAddress, setClmAddress] = React.useState<string | null>(null)
 
   const [scoreRaw, setScoreRaw] = React.useState<number | null>(null)
@@ -61,67 +73,32 @@ export function useCreditLine({ pollMs = 15_000 }: Options = {}) {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  // Reuse the runner (provider/signer) already configured in your contracts
-  const runner =
-    (evault as any)?.runner ??
-    (evaultJunior as any)?.runner ??
-    undefined
-
-  // Resolve CLM address from EVault -> RiskManager
-  const discoverClm = React.useCallback(async () => {
-    try {
-      if (!evault || !runner) {
-        setClmAddress(null)
-        return
-      }
-
-      // 1) Read RiskManager address from EVault
-      const riskManagerAddr: string = await (evault as any).MODULE_RISKMANAGER()
-      if (!riskManagerAddr || riskManagerAddr === '0x0000000000000000000000000000000000000000') {
-        setClmAddress(null)
-        return
-      }
-
-      // 2) Ask RiskManager for the CLM address (try common getter names)
-      const rm = new Contract(riskManagerAddr, RM_ABI, runner)
-      let addr: string | null = null
+  // Optional: discover a “manager” address if your Move modules expose one
+  const discoverManager = React.useCallback(async () => {
+    const candidates: readonly FQName[] = [
+      `${LENDOOR_CONTRACT}::risk_manager::manager_address` as FQName,
+      `${LENDOOR_CONTRACT}::credit_limit_manager::address_of` as FQName,
+      `${LENDOOR_CONTRACT}::controller_config::manager_address` as FQName,
+    ]
+    for (const fn of candidates) {
       try {
-        addr = await rm.creditLimitManager()
-      } catch {
-        try {
-          addr = await rm.clm()
-        } catch {
-          addr = null
+        const out = await aptos.view({
+          payload: { function: fn, typeArguments: [], functionArguments: [] },
+        })
+        const v = out?.[0]
+        if (typeof v === 'string' && v.startsWith('0x')) {
+          setClmAddress(v)
+          return
         }
-      }
-
-      if (!addr || addr === '0x0000000000000000000000000000000000000000') {
-        setClmAddress(null)
-        return
-      }
-
-      setClmAddress(addr)
-    } catch {
-      setClmAddress(null)
+      } catch { /* keep trying */ }
     }
-  }, [evault, runner])
-
-  // Create CLM / EVault readers
-  const clm = React.useMemo(() => {
-    if (!runner || !clmAddress) return null
-    return new Contract(clmAddress, CLM_ABI, runner)
-  }, [runner, clmAddress])
-
-  const evaultReader = React.useMemo(() => {
-    if (!runner || !evault) return null
-    // Use the evault address but ABI limited to debtOf()
-    return new Contract((evault as any).target ?? (evault as any).address, EVAULT_DEBT_ABI, runner)
-  }, [runner, evault])
+    setClmAddress(null)
+  }, [aptos])
 
   const read = React.useCallback(async () => {
-    if (!connectedAddress) {
+    if (!owner) {
       setScoreRaw(null)
-      setScoreDisplay('—/—')
+      setScoreDisplay('—')
       setLimitRaw(null)
       setBorrowedRaw(null)
       setBorrowedDisplay('—')
@@ -131,35 +108,71 @@ export function useCreditLine({ pollMs = 15_000 }: Options = {}) {
     setLoading(true)
     setError(null)
     try {
-      // Parallel reads (some may be null depending on discovery state)
-      const [s, l, d] = await Promise.all([
-        clm ? clm.scoreOf(connectedAddress) : Promise.resolve(null),
-        clm ? clm.creditLimit(connectedAddress) : Promise.resolve(null),
-        evaultReader ? evaultReader.debtOf(connectedAddress) : Promise.resolve(null),
-      ])
+      // 1) Score (u8) — try common names
+      const scoreFns: readonly FQName[] = [
+        `${LENDOOR_CONTRACT}::credit_limit_manager::score_of` as FQName,
+        `${LENDOOR_CONTRACT}::risk::score_of` as FQName,
+        `${LENDOOR_CONTRACT}::risk_manager::score_of` as FQName,
+        `${LENDOOR_CONTRACT}::controller::score_of` as FQName,
+      ]
+      let score: number | null = null
+      for (const fn of scoreFns) {
+        try {
+          const out = await aptos.view({
+            payload: { function: fn, typeArguments: [], functionArguments: [owner] },
+          })
+          const v = out?.[0]
+          if (v != null) {
+            const s = Number(v)
+            if (Number.isFinite(s)) {
+              score = s
+              break
+            }
+          }
+        } catch { /* keep trying */ }
+      }
+      setScoreRaw(score)
+      setScoreDisplay(score == null ? '—' : `${score}/255`)
 
-      // Score
-      const sNum = s !== null && s !== undefined ? Number(s) : null
-      setScoreRaw(sNum)
-      const sPretty = sNum === null ? '—' : `${sNum}/255`
-      setScoreDisplay(prev => (prev === sPretty ? prev : sPretty))
+      // 2) Credit limit (asset base units)
+      const limit = await tryViewsForBigint(
+        aptos,
+        [
+          `${LENDOOR_CONTRACT}::credit_limit_manager::credit_limit_of` as FQName,
+          `${LENDOOR_CONTRACT}::credit_limit_manager::credit_limit` as FQName,
+          `${LENDOOR_CONTRACT}::risk_manager::credit_limit_of` as FQName,
+          `${LENDOOR_CONTRACT}::controller::credit_limit_of` as FQName,
+        ],
+        [owner],
+        'both',
+      )
+      setLimitRaw(limit)
 
-      // Limit & Borrowed (asset units → integers, no decimals)
-      const limitBig = (l ?? null) as bigint | null
-      const borrowedBig = (d ?? null) as bigint | null
-      setLimitRaw(limitBig)
-      setBorrowedRaw(borrowedBig)
+      // 3) Borrowed amount by user (asset base units)
+      const borrowed = await tryViewsForBigint(
+        aptos,
+        [
+          `${LENDOOR_CONTRACT}::reserve::debt_of` as FQName,
+          `${LENDOOR_CONTRACT}::controller::debt_of` as FQName,
+          `${LENDOOR_CONTRACT}::profile::profile_debt` as FQName,
+          `${LENDOOR_CONTRACT}::profile::borrow_of` as FQName,
+        ],
+        [owner],
+        'withCoin',
+      )
+      setBorrowedRaw(borrowed)
 
-      const borrowedPretty = borrowedBig === null ? '—' : formatUnits0(borrowedBig, 6)
-      const limitPretty = limitBig === null ? '—' : formatUnits0(limitBig, 6)
+      // 4) Displays (truncate decimals; USDC-like by default)
+      const dBorrowed = borrowed == null ? '—' : formatUnits0(borrowed, WUSDC_DECIMALS)
+      const dLimit = limit == null ? '—' : formatUnits0(limit, WUSDC_DECIMALS)
 
-      setBorrowedDisplay(prev => (prev === borrowedPretty ? prev : borrowedPretty))
-      const pair = `${borrowedPretty}/${limitPretty} USDC`
+      setBorrowedDisplay(prev => (prev === dBorrowed ? prev : dBorrowed))
+      const pair = `${dBorrowed}/${dLimit} USDC`
       setLimitDisplay(prev => (prev === pair ? prev : pair))
     } catch (e: any) {
       setError(e?.shortMessage || e?.reason || e?.message || 'read failed')
       setScoreRaw(null)
-      setScoreDisplay('—/—')
+      setScoreDisplay('—')
       setLimitRaw(null)
       setBorrowedRaw(null)
       setBorrowedDisplay('—')
@@ -167,41 +180,16 @@ export function useCreditLine({ pollMs = 15_000 }: Options = {}) {
     } finally {
       setLoading(false)
     }
-  }, [clm, evaultReader, connectedAddress])
+  }, [aptos, owner])
 
-  // Discover CLM whenever evault/runner changes
-  React.useEffect(() => {
-    void discoverClm()
-  }, [discoverClm])
+  React.useEffect(() => { void discoverManager() }, [discoverManager])
+  React.useEffect(() => { void read() }, [read])
 
-  // First read + whenever dependencies change
-  React.useEffect(() => {
-    void read()
-  }, [read, clm, evaultReader])
-
-  // Optional polling
   React.useEffect(() => {
     if (!pollMs || pollMs <= 0) return
     const id = setInterval(() => void read(), pollMs)
     return () => clearInterval(id)
   }, [pollMs, read])
-
-  // Refresh on CLM events
-  React.useEffect(() => {
-    if (!clm || !connectedAddress) return
-    const onLineSet = (account: string) => {
-      if (account?.toLowerCase() === connectedAddress.toLowerCase()) void read()
-    }
-    const onCleared = (account: string) => {
-      if (account?.toLowerCase() === connectedAddress.toLowerCase()) void read()
-    }
-    clm.on('LineSet', onLineSet)
-    clm.on('LineCleared', onCleared)
-    return () => {
-      clm.off('LineSet', onLineSet)
-      clm.off('LineCleared', onCleared)
-    }
-  }, [clm, connectedAddress, read])
 
   return {
     clmAddress,
@@ -209,7 +197,7 @@ export function useCreditLine({ pollMs = 15_000 }: Options = {}) {
     scoreDisplay,
     limitRaw,
     borrowedRaw,
-    borrowedDisplay, 
+    borrowedDisplay,
     limitDisplay,
     loading,
     error,

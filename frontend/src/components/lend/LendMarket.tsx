@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useIsLoggedIn, useDynamicContext } from '@dynamic-labs/sdk-react-core'
+import { useCallback, useState } from 'react'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { SupplyPanelUSDC } from '@/components/lend/SupplyPanelUSDC'
 import { SupplyPanelSUSDC } from '@/components/lend/SupplyPanelSUDC'
@@ -14,9 +14,22 @@ type Tab = 'Supply USDC' | 'Supply sUSDC' | 'Withdraw USDC' | 'Withdraw sUSDC'
 
 export function LendMarket() {
   const [activeTab, setActiveTab] = useState<Tab>('Supply USDC')
-  const isLoggedIn = useIsLoggedIn()
-  const { setShowAuthFlow, loadingNetwork } = useDynamicContext()
   const { ready, value } = useUserJourney();
+  const { account, connected, connect, wallets } = useWallet();
+  const isLoggedIn = !!account?.address;
+  const loadingNetwork = false;
+   
+  const handleConnect = useCallback(async () => {
+    if (connected) return
+    try {
+      const first = wallets?.[0]
+      if (first) await connect(first.name)
+      // If you have a custom selector UI, open it here instead.
+    } catch (e) {
+      console.error('Wallet connect error:', e)
+    }
+  }, [connected, wallets, connect])
+
 
   // TODO: conectá con tus contracts
   const handleSupply = (amt: string) => console.log('Supply amount:', amt)
@@ -57,28 +70,28 @@ export function LendMarket() {
           <SupplyPanelUSDC
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
-            onConnect={() => setShowAuthFlow(true)}
+            onConnect={handleConnect}
             onSupply={handleSupply}
           />
         ) : activeTab === 'Supply sUSDC' ? (
           <SupplyPanelSUSDC
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
-            onConnect={() => setShowAuthFlow(true)}
+            onConnect={handleConnect}
             onSupply={handleSupply}
           />
         ) : activeTab === 'Withdraw USDC' ? (
           <WithdrawUSDCPanel
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
-            onConnect={() => setShowAuthFlow(true)}
+            onConnect={handleConnect}
             onWithdraw={handleWithdraw}
           />
         ) :
           <WithdrawSUSDCPanel
             isLoggedIn={!!isLoggedIn}
             loadingNetwork={loadingNetwork}
-            onConnect={() => setShowAuthFlow(true)}
+            onConnect={handleConnect}
             onWithdraw={handleWithdraw}
           />
       }

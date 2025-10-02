@@ -12,7 +12,7 @@ import UserJourneyBadge from '@/components/common/UserJourneyBadge'
 import { useUserJourney } from '@/providers/UserJourneyProvider'
 import { JusdcBalanceKPI } from '@/components/kpi/jUSDCBalance'
 import { useApproveAndDepositSUSDC } from '@/hooks/junior/useApproveAndDepositSUSDC'
-import { useIsLoggedIn } from '@dynamic-labs/sdk-react-core'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
 
 type SupplyPanelProps = {
   isLoggedIn?: boolean
@@ -33,7 +33,8 @@ export function SupplyPanelSUSDC({
   const [isExpanded, setIsExpanded] = useState(false)
   const { ready, value } = useUserJourney()
   const { submit, submitting } = useApproveAndDepositSUSDC()
-  const isLoggedIn = isLoggedInProp ?? useIsLoggedIn()
+  const { account } = useWallet();
+  const isLoggedIn = isLoggedInProp ?? !!account?.address;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

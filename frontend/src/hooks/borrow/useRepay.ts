@@ -1,43 +1,69 @@
 'use client'
 
 import * as React from 'react'
-import { parseUnits } from 'ethers'
-import { useContracts } from '@/providers/ContractsProvider'
-import { DECIMALS } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useAptos } from '@/providers/WalletProvider'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
+import {
+  LENDOOR_CONTRACT,
+  WUSDC_TYPE,
+  FA_METADATA_OBJECT,
+} from '@/lib/constants'
+import {
+  DECIMALS,
+  parseUnitsAptos,
+  formatUSDCAmount2dp,
+} from '@/lib/utils'
+import type { FQName } from '@/types/aptos'
 
+/** Compact error message extractor */
 const msg = (e: any) => e?.shortMessage || e?.reason || e?.message || 'Transaction failed'
 
-/**
- * Handles USDC -> EVault repay flow:
- * - Parses input amount to base units (configurable decimals)
- * - Checks wallet balance
- * - Ensures allowance (approve if needed)
- * - Calls evault.repay(amount, connectedAddress)
- * - Exposes submitting state and a submit(amount) action
- */
+/** Read FA balance via indexer; returns bigint or null if unavailable */
+async function readFaBalance(aptos: any, addr: string, metadataAddr: string): Promise<bigint | null> {
+  try {
+    const balances = await aptos.getAccountFungibleAssetBalances({ accountAddress: addr })
+    const hit =
+      balances?.find(
+        (b: any) =>
+          b?.asset?.metadata_address === metadataAddr ||
+          b?.asset?.metadata?.address === metadataAddr ||
+          b?.metadata_address === metadataAddr,
+      ) ?? null
+    if (hit?.amount != null) return BigInt(hit.amount)
+  } catch { /* tolerate indexer hiccups */ }
+  return null
+}
+
+// controller::repay_fa<Coin>(profile_name: vector<u8>, amount: u64)
+const FN_REPAY_FA = `${LENDOOR_CONTRACT}::controller::repay_fa` as FQName
+
+/** Repay USDC-denominated debt using FA (no ERC20 allowance model on Aptos) */
 export function useRepay() {
-  const { evault, evaultAddress, usdc, connectedAddress, refresh } = useContracts()
+  const { aptos } = useAptos()
+  const { account, signAndSubmitTransaction } = useWallet()
   const [submitting, setSubmitting] = React.useState(false)
 
+  // Encode vector<u8> for Move
+  const utf8Bytes = React.useMemo(() => new TextEncoder(), []).encode.bind(new TextEncoder())
+
   const submit = React.useCallback(
-    async (amountInput: string) => {
-      if (!amountInput) {
+    async (amountInput: string, profileName: string = 'main') => {
+      const raw = amountInput?.trim()
+      if (!raw) {
         toast.error('Enter an amount.')
         return false
       }
-
-      if (!evault || !evaultAddress || !usdc || !connectedAddress) {
-        toast.error('Missing setup', {
-          description: 'Vault/USDC contracts or addresses are not ready.',
-        })
+      const addr = account?.address?.toString()
+      if (!addr) {
+        toast.error('Connect a wallet', { description: 'No account connected.' })
         return false
       }
 
-      // Parse amount
+      // Parse UI → base units (u64)
       let amount: bigint
       try {
-        amount = parseUnits(amountInput.trim(), DECIMALS)
+        amount = parseUnitsAptos(raw, DECIMALS)
         if (amount <= 0n) {
           toast.error('Amount must be greater than 0.')
           return false
@@ -51,43 +77,40 @@ export function useRepay() {
       const tLoading = toast.loading('Submitting repayment…')
 
       try {
-        // 1) Wallet balance check
-        const bal: bigint = await (usdc as any).balanceOf(connectedAddress)
-        if (bal < amount) {
+        // Optional UX: pre-check FA balance; let tx fail if indexer is unavailable
+        const maybeBal = await readFaBalance(aptos, addr, FA_METADATA_OBJECT)
+        if (maybeBal != null && maybeBal < amount) {
           toast.dismiss(tLoading)
           toast.error('Insufficient balance', {
-            description: 'Your USDC balance is not enough for this repayment.',
+            description: `You have ${formatUSDCAmount2dp(maybeBal)} and need ${formatUSDCAmount2dp(amount)}.`,
           })
           return false
         }
 
-        // 2) Allowance check (approve if needed)
-        const allowance: bigint = await (usdc as any).allowance(connectedAddress, evaultAddress)
-        if (allowance < amount) {
-          const txA = await (usdc as any).approve(evaultAddress, amount)
-          await txA.wait()
-          toast.success('Approval confirmed')
-        }
+        // Single on-chain call
+        const pending = await signAndSubmitTransaction({
+          data: {
+            function: FN_REPAY_FA,
+            typeArguments: [WUSDC_TYPE],
+            functionArguments: [utf8Bytes(profileName), amount],
+          },
+        })
+        await aptos.waitForTransaction({ transactionHash: pending.hash })
 
-        // 3) Repay
-        const tx = await (evault as any).repay(amount, connectedAddress)
-        await tx.wait()
-
+        toast.dismiss(tLoading)
         toast.success('Repayment confirmed', {
           description: 'Your outstanding balance has been reduced.',
         })
-
-        await refresh?.() // refresh app state (balances, debt, etc.)
         return true
       } catch (e: any) {
+        toast.dismiss(tLoading)
         toast.error('Repay failed', { description: msg(e) })
         return false
       } finally {
-        toast.dismiss(tLoading)
         setSubmitting(false)
       }
     },
-    [evault, evaultAddress, usdc, connectedAddress, refresh]
+    [account?.address, signAndSubmitTransaction, aptos],
   )
 
   return { submit, submitting }

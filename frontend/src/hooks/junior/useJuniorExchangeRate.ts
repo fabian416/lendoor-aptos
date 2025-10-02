@@ -1,60 +1,62 @@
 'use client'
 
 import * as React from 'react'
-import { Contract } from 'ethers'
-import { useContracts } from '@/providers/ContractsProvider'
-
-const ABI = [
-  'function decimals() view returns (uint8)',
-  'function asset() view returns (address)',
-  'function convertToJuniorAssets(uint256) view returns (uint256)',
-] as const
-
-const ERC20_DEC_ABI = ['function decimals() view returns (uint8)'] as const
+import { useAptos } from '@/providers/WalletProvider'
+import { LENDOOR_CONTRACT, WUSDC_DECIMALS, WUSDC_TYPE } from '@/lib/constants'
+import { decRaw } from '@/lib/utils'
 
 type Options = { pollMs?: number }
 
-/** jUSDC/USDC -> display "1/<USDC per 1 jUSDC>" (mismo estilo que sUSDC/USDC) */
+/** Try a few common view fns to read junior PPS in Decimal(1e9) scale. */
+async function readJuniorPpsScaled(aptos: any): Promise<bigint | null> {
+  const candidates = [
+    `${LENDOOR_CONTRACT}::junior::pps_scaled`,
+    `${LENDOOR_CONTRACT}::junior::pps`,
+    `${LENDOOR_CONTRACT}::junior::price_per_share`,
+    `${LENDOOR_CONTRACT}::junior::current_exchange_rate`,
+  ]
+  for (const fn of candidates) {
+    try {
+      const out = await aptos.view({
+        payload: { function: fn, typeArguments: [WUSDC_TYPE], functionArguments: [] },
+      })
+      const v = out?.[0]
+      const scaled = v == null ? 0n : decRaw(v)
+      if (scaled > 0n) return scaled
+    } catch {
+      // try next candidate
+    }
+  }
+  return null
+}
+
+/**
+ * jUSDC/USDC exchange rate (USDC per 1 jUSDC).
+ * Displays "1/<rate>" like the senior hook.
+ */
 export function useJuniorExchangeRate({ pollMs = 30_000 }: Options = {}) {
-  const { evault, evaultAddress, usdcDecimals } = useContracts()
+  const { aptos } = useAptos()
   const [rate, setRate] = React.useState<number | null>(null) // USDC per 1 jUSDC
   const [loading, setLoading] = React.useState(false)
 
-  const runner = React.useMemo(
-    () => (evault as any)?.runner ?? (evault as any)?.provider ?? null,
-    [evault],
-  )
-
   const read = React.useCallback(async () => {
-    if (!evaultAddress || !runner) return
     setLoading(true)
     try {
-      const v = new Contract(evaultAddress, ABI as any, runner)
-
-      // j-share decimals (son los mismos que el eToken)
-      const jDec: number = Number(await v.decimals())
-
-      // USDC decimals (usa los del provider si ya los tenemos)
-      let aDec = usdcDecimals ?? 6
-      if (usdcDecimals == null) {
-        const assetAddr: string = await v.asset()
-        const token = new Contract(assetAddr, ERC20_DEC_ABI as any, runner)
-        aDec = Number(await token.decimals())
+      const ppsScaled = await readJuniorPpsScaled(aptos) // Decimal(1e9)
+      if (!ppsScaled) {
+        setRate(null)
+        return
       }
-
-      // 1 jUSDC en base units -> USDC base units
-      const oneJ = 10n ** BigInt(jDec)
-      const assetsUSDC: bigint = await v.convertToJuniorAssets(oneJ)
-
-      // USDC per 1 jUSDC
-      const r = Number(assetsUSDC) / 10 ** aDec
-      setRate(r)
+      // Convert Decimal(1e9) → base units → token units
+      const baseUnitsPerShare = Number(ppsScaled) / 1e9
+      const tokensPerShare = baseUnitsPerShare / 10 ** WUSDC_DECIMALS
+      setRate(Number.isFinite(tokensPerShare) ? tokensPerShare : null)
     } catch {
       setRate(null)
     } finally {
       setLoading(false)
     }
-  }, [evaultAddress, runner, usdcDecimals])
+  }, [aptos])
 
   React.useEffect(() => {
     void read()

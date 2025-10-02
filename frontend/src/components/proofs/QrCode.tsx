@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { InfoTip } from '@/components/common/InfoTooltip'
 import { ArrowLeft, ShieldCheck, CheckCircle } from 'lucide-react'
-import { useUserJourney } from '@/providers/UserProvider'
+import { useUser } from '@/providers/UserProvider'
 import { useWallet } from '@aptos-labs/wallet-adapter-react'
 
 // zkMe Widget (Compliance Suite)
@@ -23,7 +23,7 @@ const CHAIN_ID = '137'                                       // cross-chain (doc
 
 export function QRCodeView({ onBack }: QRCodeViewProps) {
   const { account, connected } = useWallet()
-  const { setIsVerified } = useUserJourney()
+  const { setIsVerified } = useUser()
 
   const [loading, setLoading] = useState(false)
   const [verified, setVerified] = useState<boolean | null>(null)

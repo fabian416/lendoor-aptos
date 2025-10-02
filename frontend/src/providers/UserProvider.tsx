@@ -2,7 +2,6 @@
 
 import * as React from 'react'
 
-// hooks
 import { useCreditLine } from '@/hooks/borrow/useCreditLine'
 import { useBorrow } from '@/hooks/borrow/useBorrow'
 import { useSeniorExchangeRate } from '@/hooks/senior/useSeniorExchangeRate'
@@ -13,8 +12,8 @@ import { useSusdcBalance } from '@/hooks/senior/useSusdcBalance'
 import { useJusdcBalance } from '@/hooks/junior/useJusdcBalance'
 import { useSeniorAvailableToWithdraw } from '@/hooks/senior/useSeniorAvailableToWithdraw'
 import { useJuniorAvailableToWithdraw } from '@/hooks/junior/useJuniorAvailableToWithdraw'
-import { useIsLoggedIn, useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import { BACKEND_URL } from '@/lib/constants'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
 
 type UserContextValue = {
   creditScoreDisplay: string
@@ -45,7 +44,16 @@ const UserContext = React.createContext<UserContextValue | null>(null)
 
 type UserProviderProps = { children: React.ReactNode }
 
-const normalizeWallet = (w?: string | null) => (w ?? '').trim().toLowerCase()
+// Normalize any AccountAddress|string into a lowercased hex string
+const normalizeWallet = (addr: unknown) => {
+  if (!addr) return ''
+  try {
+    const s = typeof addr === 'string' ? addr : (addr as any)?.toString?.() ?? String(addr)
+    return s.trim().toLowerCase()
+  } catch {
+    return ''
+  }
+}
 
 export function UserProvider({ children }: UserProviderProps) {
   // Credit line
@@ -59,7 +67,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const { display: seniorExchangeRateDisplay } = useSeniorExchangeRate()
   const { display: juniorExchangeRateDisplay } = useJuniorExchangeRate()
 
-  // APY (senior auto-discovers IRM internally)
+  // APY
   const { displayAPY: seniorApyDisplay } = useSeniorYield()
   const { displayAPY: juniorApyDisplay } = useJuniorYield()
 
@@ -78,90 +86,82 @@ export function UserProvider({ children }: UserProviderProps) {
     submitting: borrowSubmitting,
   } = useBorrow({ requireController: true })
 
-  // ===== verification (from backend) =====
-  const isLoggedIn = useIsLoggedIn()
-  const { primaryWallet } = useDynamicContext()
-  const wallet = React.useMemo(
-    () => normalizeWallet((primaryWallet as any)?.address),
-    [primaryWallet],
-  )
+  // Wallet (Aptos)
+  const { account, connected } = useWallet()
+  const wallet = React.useMemo(() => normalizeWallet(account?.address), [account?.address])
 
+  // Backend verification flag
   const [isVerified, setIsVerified] = React.useState(false)
 
-  // Fetch only the verification flag from backend
   React.useEffect(() => {
     let alive = true
-
     const run = async () => {
       try {
-        // If not logged in or no wallet, treat as unverified
-        if (!isLoggedIn || !wallet) {
-          if (!alive) return
-          setIsVerified(false)
+        // Treat "not connected" as unverified
+        if (!connected || !wallet) {
+          if (alive) setIsVerified(false)
           return
         }
         const res = await fetch(`${BACKEND_URL}/user/${wallet}`)
         if (!res.ok) {
-          if (!alive) return
-          setIsVerified(false)
+          if (alive) setIsVerified(false)
           return
         }
         const data: { isVerified?: boolean } = await res.json()
-        if (!alive) return
-        setIsVerified(Boolean(data?.isVerified))
+        if (alive) setIsVerified(Boolean(data?.isVerified))
       } catch {
-        if (!alive) return
-        setIsVerified(false)
+        if (alive) setIsVerified(false)
       }
     }
-
     void run()
     return () => {
       alive = false
     }
-  }, [isLoggedIn, wallet])
+  }, [connected, wallet])
 
-  const value = React.useMemo<UserContextValue>(() => ({
-    creditScoreDisplay,
-    creditLimitDisplay,
-    borrowedDisplay,
+  const value = React.useMemo<UserContextValue>(
+    () => ({
+      creditScoreDisplay,
+      creditLimitDisplay,
+      borrowedDisplay,
 
-    seniorExchangeRateDisplay,
-    juniorExchangeRateDisplay,
+      seniorExchangeRateDisplay,
+      juniorExchangeRateDisplay,
 
-    seniorApyDisplay,
-    juniorApyDisplay,
+      seniorApyDisplay,
+      juniorApyDisplay,
 
-    susdcDisplay,
-    jusdcDisplay,
+      susdcDisplay,
+      jusdcDisplay,
 
-    seniorWithdrawAvailableDisplay,
-    juniorWithdrawAvailableDisplay,
+      seniorWithdrawAvailableDisplay,
+      juniorWithdrawAvailableDisplay,
 
-    maxBorrowDisplay,
-    borrowSubmit,
-    borrowSubmitting,
+      maxBorrowDisplay,
+      borrowSubmit,
+      borrowSubmitting,
 
-    isVerified,
-    setIsVerified,
-  }), [
-    creditScoreDisplay,
-    creditLimitDisplay,
-    borrowedDisplay,
-    seniorExchangeRateDisplay,
-    juniorExchangeRateDisplay,
-    seniorApyDisplay,
-    juniorApyDisplay,
-    susdcDisplay,
-    jusdcDisplay,
-    seniorWithdrawAvailableDisplay,
-    juniorWithdrawAvailableDisplay,
-    maxBorrowDisplay,
-    borrowSubmit,
-    borrowSubmitting,
-    isVerified,
-    setIsVerified,
-  ])
+      isVerified,
+      setIsVerified,
+    }),
+    [
+      creditScoreDisplay,
+      creditLimitDisplay,
+      borrowedDisplay,
+      seniorExchangeRateDisplay,
+      juniorExchangeRateDisplay,
+      seniorApyDisplay,
+      juniorApyDisplay,
+      susdcDisplay,
+      jusdcDisplay,
+      seniorWithdrawAvailableDisplay,
+      juniorWithdrawAvailableDisplay,
+      maxBorrowDisplay,
+      borrowSubmit,
+      borrowSubmitting,
+      isVerified,
+    ]
+  )
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>
 }

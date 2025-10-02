@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { useLocation } from "react-router-dom";
 
 /* Stored steps (persisted) */
@@ -32,7 +32,7 @@ export type UserJourney = StoredJourney | "login";
 const DEFAULT_LOGGED_IN: StoredJourney = STORED_USER_JOURNEYS[0];
 const DEFAULT_LOGGED_OUT: UserJourney = "login";
 
-/* Derived groups only care about stored journeys */
+/* Derived groups (only consider stored journeys) */
 const ONLY_BORROW_SET = new Set<StoredJourney>([
   "verify_identity",
   "borrow",
@@ -51,7 +51,16 @@ const LEND_SET = new Set<StoredJourney>([
 const isStoredJourney = (v: unknown): v is StoredJourney =>
   typeof v === "string" && (STORED_USER_JOURNEYS as readonly string[]).includes(v);
 
-const normalizeWallet = (w?: string | null) => (w ?? "").trim().toLowerCase();
+/** Normalize AccountAddress|string into lowercase hex */
+const normalizeWallet = (addr?: unknown) => {
+  if (!addr) return "";
+  try {
+    const s = typeof addr === "string" ? addr : (addr as any)?.toString?.() ?? String(addr);
+    return s.trim().toLowerCase();
+  } catch {
+    return "";
+  }
+};
 const hasWindow = () => typeof window !== "undefined";
 
 /* Keys (null when no wallet => no storage I/O) */
@@ -130,13 +139,11 @@ export function UserJourneyProvider({
   const location = useLocation();
   const pathname = normalizePath(location?.pathname || "/");
 
-  const { primaryWallet } = useDynamicContext();
+  // Prefer explicit prop; otherwise use Aptos wallet adapter.
+  const { account } = useWallet();
   const providedWallet = useMemo(() => normalizeWallet(walletAddress), [walletAddress]);
-  const dynamicWallet = useMemo(
-    () => normalizeWallet((primaryWallet as any)?.address),
-    [primaryWallet],
-  );
-  const wallet = providedWallet || dynamicWallet || null;
+  const aptosWallet = useMemo(() => normalizeWallet(account?.address), [account?.address]);
+  const wallet = providedWallet || aptosWallet || null;
 
   useEffect(() => {
     setReady(false);
@@ -159,13 +166,13 @@ export function UserJourneyProvider({
 
   const set = useCallback(
     async (next: UserJourney) => {
+      // No wallet: never persist
       if (!wallet) {
-        // Logged out: context only, never persist
         setValue("login");
         return;
       }
+      // Logged-in but forcing 'login' → context only
       if (next === "login") {
-        // Logged in but asked to show login -> context only
         setValue("login");
         return;
       }
@@ -185,13 +192,9 @@ export function UserJourneyProvider({
     [wallet],
   );
 
-  // Step update convenience wrapper
-  const updateJourney = useCallback(
-    async (next: UserJourney) => {
-      await set(next);
-    },
-    [set],
-  );
+  const updateJourney = useCallback(async (next: UserJourney) => {
+    await set(next);
+  }, [set]);
 
   const clear = useCallback(async () => {
     await set(wallet ? DEFAULT_LOGGED_IN : DEFAULT_LOGGED_OUT);
@@ -205,7 +208,7 @@ export function UserJourneyProvider({
     setValue(ensureStep(wallet));
   }, [wallet]);
 
-  /* Derived flags (only true for stored journeys) */
+  /* Derived flags (only for stored journeys) */
   const onBorrowPage = useMemo(() => inSection(pathname, "/borrow"), [pathname]);
   const onLendPage = useMemo(() => inSection(pathname, "/lend"), [pathname]);
 

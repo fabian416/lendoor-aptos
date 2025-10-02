@@ -1,62 +1,86 @@
 'use client'
 
 import * as React from 'react'
-import { Contract, formatUnits } from 'ethers'
-import { useContracts } from '@/providers/ContractsProvider'
-import { DECIMALS } from '@/lib/utils' // your demo display precision (e.g. 4)
-
-const JWRAP_ABI = [
-  'function maxWithdraw(address owner) view returns (uint256)', // returns e-shares (sUSDC) in base units
-  'function decimals() view returns (uint8)',                   // on-chain decimals of sUSDC (e-shares)
-] as const
+import { useAptos } from '@/providers/WalletProvider'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
+import { LENDOOR_CONTRACT, WUSDC_DECIMALS, WUSDC_TYPE } from '@/lib/constants'
+import { DECIMALS } from '@/lib/utils'
 
 type Options = { pollMs?: number }
 
-/**
- * Reads max e-shares (sUSDC) withdrawable from the junior wrapper,
- * scales to human using on-chain decimals, then rescale for UI with DECIMALS.
- * Example: on-chain 6, UI 4 → multiply by 10^(6-4)=100. So 0.2922 → 29.22.
- */
-export function useJuniorAvailableToWithdraw({ pollMs = 30_000 }: Options = {}) {
-  const { evault, evaultJuniorAddress, connectedAddress } = useContracts()
+/** Reads max withdrawable senior shares from the junior wrapper. */
+async function readJuniorMaxWithdrawSShares(
+  aptos: any,
+  owner: string | { toString: () => string }, // <-- accept AccountAddress-like
+): Promise<bigint | null> {
+  const ownerStr = typeof owner === 'string' ? owner : owner.toString()
 
-  const [rawSShares, setRawSShares] = React.useState<bigint | null>(null) // raw base units (on-chain)
-  const [sDec, setSDec] = React.useState<number | null>(null)             // on-chain decimals
-  const [uiAmount, setUiAmount] = React.useState<number | null>(null)     // rescaled for UI (DECIMALS)
+  const fns = [
+    `${LENDOOR_CONTRACT}::junior::max_withdraw_senior_shares`,
+    `${LENDOOR_CONTRACT}::junior::max_withdraw_s`,
+    `${LENDOOR_CONTRACT}::junior::max_withdraw`,
+    `${LENDOOR_CONTRACT}::junior::withdrawable_senior_shares`,
+    `${LENDOOR_CONTRACT}::junior::available_to_withdraw_s`,
+  ]
+  for (const fn of fns) {
+    try {
+      const out = await aptos.view({
+        payload: { function: fn, typeArguments: [WUSDC_TYPE], functionArguments: [ownerStr] },
+      })
+      const v = out?.[0]
+      if (v == null) continue
+      return typeof v === 'bigint' ? v : BigInt(v as any)
+    } catch {
+      // try next candidate
+    }
+  }
+  return null
+}
+
+/** Base-units → UI units using DECIMALS. */
+function toUiFromBase(raw: bigint, onChainDec: number): number | null {
+  try {
+    const human = Number(raw) / 10 ** onChainDec
+    if (!Number.isFinite(human)) return null
+    const scale = Math.pow(10, onChainDec - DECIMALS)
+    return human * scale
+  } catch {
+    return null
+  }
+}
+
+export function useJuniorAvailableToWithdraw({ pollMs = 30_000 }: Options = {}) {
+  const { aptos } = useAptos()
+  const { account } = useWallet()
+  const owner = account?.address // AccountAddress | string
+
+  const [rawSShares, setRawSShares] = React.useState<bigint | null>(null)
+  const [sDec, setSDec] = React.useState<number | null>(null)
+  const [uiAmount, setUiAmount] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(false)
 
-  // Provider/runner for read-only calls
-  const runner = React.useMemo(
-    () => (evault as any)?.runner ?? (evault as any)?.provider ?? null,
-    [evault],
-  )
-
   const read = React.useCallback(async () => {
-    if (!evaultJuniorAddress || !connectedAddress || !runner) return
+    if (!owner) {
+      setRawSShares(null)
+      setSDec(null)
+      setUiAmount(null)
+      return
+    }
     setLoading(true)
     try {
-      const j = new Contract(evaultJuniorAddress, JWRAP_ABI as any, runner)
-
-      // 1) Raw amount in base units (sUSDC e-shares)
-      const sOut: bigint = await j.maxWithdraw(connectedAddress)
+      const sOut = await readJuniorMaxWithdrawSShares(aptos, owner) // <-- pass owner as-is
+      if (sOut == null) {
+        setRawSShares(null)
+        setSDec(null)
+        setUiAmount(null)
+        return
+      }
       setRawSShares(sOut)
 
-      // 2) On-chain decimals for sUSDC (e-shares)
-      const onChainDec = Number(await j.decimals())
+      const onChainDec = WUSDC_DECIMALS // sUSDC shares use the wrapped coin decimals
       setSDec(onChainDec)
 
-      // 3) Human (on-chain) units
-      const humanStr = formatUnits(sOut, onChainDec)
-      const humanNum = Number(humanStr)
-
-      // 4) Rescale to UI decimals: multiply by 10^(onChainDec - DECIMALS)
-      if (Number.isFinite(humanNum)) {
-        const delta = onChainDec - DECIMALS
-        const scale = Math.pow(10, delta)
-        setUiAmount(humanNum * scale)
-      } else {
-        setUiAmount(null)
-      }
+      setUiAmount(toUiFromBase(sOut, onChainDec))
     } catch {
       setRawSShares(null)
       setSDec(null)
@@ -64,7 +88,7 @@ export function useJuniorAvailableToWithdraw({ pollMs = 30_000 }: Options = {}) 
     } finally {
       setLoading(false)
     }
-  }, [evaultJuniorAddress, connectedAddress, runner])
+  }, [aptos, owner])
 
   React.useEffect(() => {
     void read()
@@ -73,7 +97,6 @@ export function useJuniorAvailableToWithdraw({ pollMs = 30_000 }: Options = {}) 
     return () => clearInterval(id)
   }, [read, pollMs])
 
-  // Display with your UI precision (DECIMALS) and the correct token label
   const display =
     uiAmount == null
       ? '—'

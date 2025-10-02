@@ -1,21 +1,20 @@
 'use client'
 
 import * as React from 'react'
-import { parseUnits } from 'ethers'
-import { useContracts } from '@/providers/ContractsProvider'
-import { useCreditLine } from '@/hooks/borrow/useCreditLine'
-import { DECIMALS } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useAptos } from '@/providers/WalletProvider'
+import { useWallet } from '@aptos-labs/wallet-adapter-react'
+import { useCreditLine } from '@/hooks/borrow/useCreditLine' // <- tu versión Move
+import { DECIMALS, parseUnitsAptos } from '@/lib/utils'
+import { LENDOOR_CONTRACT, WUSDC_TYPE } from '@/lib/constants'
+import type { FQName } from '@/types/aptos'
 
-type Options = {
-  /** If true, will attempt to enable controller before borrowing (default: true). */
-  requireController?: boolean
-}
+type Options = { requireController?: boolean } // kept for API parity; no-op on Move
 
 const err = (e: any) => e?.shortMessage || e?.reason || e?.message || 'Transaction failed'
 
 /** Integer formatter (truncate decimals) with thousands separators. */
-function fmt0(amount: bigint, decimals = 6): string {
+function fmt0(amount: bigint, decimals = DECIMALS): string {
   const base = 10n ** BigInt(decimals)
   const whole = amount / base
   return whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
@@ -23,24 +22,22 @@ function fmt0(amount: bigint, decimals = 6): string {
 
 /** sanitize input like "1_000" or "1,000.25" -> "1000.25" */
 function cleanAmountInput(s: string): string {
-  return s.replace(/[_,\s]/g, '')
+  return (s || '').replace(/[_,\s]/g, '')
 }
 
-/**
- * useBorrow (toast-based UX)
- * - Computes capacity = max(limit - borrowed, 0)
- * - Validates user amount vs capacity
- * - (Optionally) enables controller on EVC for the user & this vault
- * - Calls evault.borrow(amount, receiver)
- * - All feedback via `sonner` toasts (no throws)
- */
+// controller::borrow_fa<Coin>(profile_name: vector<u8>, amount: u64)
+const FN_BORROW_FA = `${LENDOOR_CONTRACT}::controller::borrow_fa` as FQName
+
 export function useBorrow({ requireController = true }: Options = {}) {
-  const { evault, evaultAddress, connectedAddress, controller, refresh } = useContracts()
+  const { aptos } = useAptos()
+  const { account, signAndSubmitTransaction } = useWallet()
+
+  // Credit line (Move version): limitRaw/borrowedRaw in base units
   const { limitRaw, borrowedRaw } = useCreditLine({ pollMs: 15_000 })
 
   const [submitting, setSubmitting] = React.useState(false)
 
-  // Capacity (in base units)
+  // Capacity = max(limit - borrowed, 0)
   const maxBorrowRaw: bigint | null = React.useMemo(() => {
     if (limitRaw == null || borrowedRaw == null) return null
     const cap = limitRaw - borrowedRaw
@@ -52,54 +49,54 @@ export function useBorrow({ requireController = true }: Options = {}) {
     return `${fmt0(maxBorrowRaw, DECIMALS)} USDC`
   }, [maxBorrowRaw])
 
-  /** quick client-side validation for a string amount in asset units */
+  /** Basic amount validation vs capacity */
   const validateAmount = React.useCallback(
     (amountInput: string) => {
-      const cleaned = cleanAmountInput(amountInput || '')
-      if (!cleaned) return { ok: false, reason: 'Enter an amount.' }
-
+      const cleaned = cleanAmountInput(amountInput)
+      if (!cleaned) return { ok: false, reason: 'Enter an amount.' as string, amount: null as bigint | null }
       let amount: bigint
       try {
-        amount = parseUnits(cleaned, DECIMALS)
+        amount = parseUnitsAptos(cleaned, DECIMALS)
       } catch {
-        return { ok: false, reason: 'Invalid amount.' }
+        return { ok: false, reason: 'Invalid amount.', amount: null }
       }
-      if (amount <= 0n) return { ok: false, reason: 'Amount must be greater than 0.' }
-
+      if (amount <= 0n) return { ok: false, reason: 'Amount must be greater than 0.', amount: null }
       if (maxBorrowRaw != null && amount > maxBorrowRaw) {
-        return { ok: false, reason: 'Amount exceeds your available capacity.' }
+        return { ok: false, reason: 'Amount exceeds your available capacity.', amount: null }
       }
       return { ok: true as const, reason: null as null, amount }
     },
-    [maxBorrowRaw]
+    [maxBorrowRaw],
   )
 
-  /** convenience flags for UIs */
-  const checkExceeds = React.useCallback(
+  /** UI helper for progressive validation */
+  const exceedsCapacity = React.useCallback(
     (amountInput: string) => {
-      const cleaned = cleanAmountInput(amountInput || '')
+      const cleaned = cleanAmountInput(amountInput)
       try {
-        const a = parseUnits(cleaned || '0', DECIMALS)
+        const a = parseUnitsAptos(cleaned || '0', DECIMALS)
         return maxBorrowRaw != null && a > maxBorrowRaw
       } catch {
         return false
       }
     },
-    [maxBorrowRaw]
+    [maxBorrowRaw],
   )
 
+  // Encode vector<u8> for Move
+  const toBytes = React.useMemo(() => new TextEncoder(), []).encode.bind(new TextEncoder())
+
   const submit = React.useCallback(
-    async (amountInput: string) => {
-      if (!evault || !evaultAddress || !connectedAddress) {
-        toast.error('Missing setup', {
-          description: 'Vault contracts or addresses are not ready.',
-        })
+    async (amountInput: string, profileName: string = 'main') => {
+      const addr = account?.address?.toString()
+      if (!addr) {
+        toast.error('Connect a wallet', { description: 'No account connected.' })
         return false
       }
 
       const { ok, reason, amount } = validateAmount(amountInput)
       if (!ok || !amount) {
-        toast.error('Invalid amount', { description: reason || 'Please check the value.' })
+        toast.error('Invalid amount', { description: reason ?? 'Please check the value.' })
         return false
       }
 
@@ -107,44 +104,32 @@ export function useBorrow({ requireController = true }: Options = {}) {
       const tLoading = toast.loading('Submitting borrow…')
 
       try {
-        // Enable controller (best-effort)
-        if (requireController && controller) {
-          try {
-            const txCtrl = await (controller as any).enableController(
-              connectedAddress,
-              evaultAddress
-            )
-            await txCtrl.wait()
-          } catch (e) {
-            const m = err(e).toLowerCase()
-            // Ignore benign "already enabled" variants
-            if (!m.includes('already') && !m.includes('enabled')) {
-              toast.dismiss(tLoading)
-              toast.error('Controller error', { description: err(e) })
-              return false
-            }
-          }
-        }
+        // No "enable controller" step on Move; controller access is configured on-chain by admins.
 
-        // Borrow
-        const tx = await (evault as any).borrow(amount, connectedAddress)
-        await tx.wait()
+        // Borrow FA to the caller
+        const pending = await signAndSubmitTransaction({
+          data: {
+            function: FN_BORROW_FA,
+            typeArguments: [WUSDC_TYPE],
+            functionArguments: [toBytes(profileName), amount],
+          },
+        })
+        await aptos.waitForTransaction({ transactionHash: pending.hash })
 
+        toast.dismiss(tLoading)
         toast.success('Borrow confirmed', {
           description: 'Funds have been transferred to your wallet.',
         })
-
-        await refresh?.() // refresh app state (debt, limit/borrowed, balances)
         return true
       } catch (e: any) {
+        toast.dismiss(tLoading)
         toast.error('Borrow failed', { description: err(e) })
         return false
       } finally {
-        toast.dismiss(tLoading)
         setSubmitting(false)
       }
     },
-    [evault, evaultAddress, connectedAddress, controller, requireController, validateAmount, refresh]
+    [account?.address, signAndSubmitTransaction, aptos, validateAmount],
   )
 
   return {
@@ -153,7 +138,7 @@ export function useBorrow({ requireController = true }: Options = {}) {
     maxBorrowRaw,
 
     maxBorrowDisplay,
-    exceedsCapacity: checkExceeds,
+    exceedsCapacity,
     validateAmount,
     canSubmit: (amountStr: string) => validateAmount(amountStr).ok,
 

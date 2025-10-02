@@ -2,11 +2,11 @@ module lendoor::controller {
     use std::signer;
     use std::string;
     use aptos_std::event::{Self}; 
-
     use aptos_framework::coin;
     use aptos_framework::coin::Coin; 
-    use aptos_framework::fungible_asset::Metadata;
     use aptos_framework::object::Object;
+    use aptos_framework::object;
+    use aptos_framework::fungible_asset::Metadata;
 
     use util_types::decimal;
 
@@ -35,6 +35,7 @@ module lendoor::controller {
     const ECONTROLLER_DEPOSIT_ZERO_AMOUNT: u64 = 1;
     /// When the account is not Aries Markets Account. 
     const ECONTROLLER_NOT_ARIES: u64 = 2;
+
 
     #[event]
     struct AddReserveEvent<phantom CoinType> has drop, store  {
@@ -205,17 +206,25 @@ module lendoor::controller {
     /// this account is only used for deployment) and transfer the authentication key to a 
     /// multisig/another account later on.
     public entry fun init(account: &signer, admin_addr: address) {
-        controller_config::init_config(account, admin_addr);
-        reserve::init(account);
-        credit_manager::init(account); // << new
+        // idempotent
+        controller_config::init_if_needed(account, admin_addr);
     }
 
     public entry fun init_wrapper_fa_signer(account: &signer) {
-        fa_to_coin_wrapper::init(account);
+        {
+            // idempotent: if the wrapper's resource account already exists, it does nothing
+            fa_to_coin_wrapper::init_if_needed(account, b"FASigner");
+        }
     }
 
+    /// Creates the wrapper FA signer with an explicit seed (idempotent).
+    public entry fun init_wrapper_fa_signer_with_seed(account: &signer, seed: vector<u8>) {
+        controller_config::assert_is_admin(signer::address_of(account));
+        // idempotent: if the resource account already exists, this is a no-op
+        fa_to_coin_wrapper::init_if_needed(account, seed);
+    }
     public entry fun init_wrapper_coin<WCoin>(account: &signer, metadata: Object<Metadata>) {
-        fa_to_coin_wrapper::add_fa<WCoin>(account, metadata);
+        fa_to_coin_wrapper::add_fa_if_needed<WCoin>(account, metadata);
     }
 
     /// Need to have a corresponding Wrapped Coin.
@@ -245,22 +254,24 @@ module lendoor::controller {
 
     public entry fun add_reserve<Coin0>(admin: &signer) {
         controller_config::assert_is_admin(signer::address_of(admin));
-        // TODO: change to use `lp_store` since it won't always be the same as the `admin`.
-        // TODO: change to custom configuration.
-        reserve::create<Coin0>(
+
+        let created = reserve::create_if_needed<Coin0>(
             admin,
             decimal::one(),
             reserve_config::default_config(),
             interest_rate_config::default_config()
         );
-        tranche_manager::init_for<Coin0>(admin);
 
-        event::emit(AddReserveEvent<Coin0> {
-            signer_addr: signer::address_of(admin),
-            initial_exchange_rate_decimal: decimal::raw(decimal::one()),
-            reserve_conf: reserve_config::default_config(),
-            interest_rate_conf: interest_rate_config::default_config()
-        });
+        if (created) {
+            tranche_manager::init_for<Coin0>(admin);
+
+            event::emit(AddReserveEvent<Coin0> {
+                signer_addr: signer::address_of(admin),
+                initial_exchange_rate_decimal: decimal::raw(decimal::one()),
+                reserve_conf: reserve_config::default_config(),
+                interest_rate_conf: interest_rate_config::default_config()
+            });
+        };
     }
 
     #[test_only]
@@ -386,7 +397,7 @@ module lendoor::controller {
         repay_only: bool,
     ) {
         assert!(amount > 0, ECONTROLLER_DEPOSIT_ZERO_AMOUNT);
-        // Lazy init (solo el dueño puede crear su Profile)
+        // Lazy init (only the owner can create their Profile)
         profile::ensure_for_signer(account);
         let addr = signer::address_of(account);
         deposit_for<Coin0>(account, profile_name, amount, addr, repay_only);
@@ -670,5 +681,18 @@ module lendoor::controller {
         };
     }
 
+    public entry fun init_wrapper_coin_addr<WCoin>(
+        account: &signer,
+        metadata_addr: address
+    ) {
+        let metadata = object::address_to_object<Metadata>(metadata_addr);
+        fa_to_coin_wrapper::add_fa_if_needed<WCoin>(account, metadata);
+    }
 
+    public entry fun init_reserves_if_needed(account: &signer) {
+        controller_config::assert_is_admin(signer::address_of(account));
+        if (!reserve::reserves_exist()) {
+            reserve::init_if_needed(account);
+        };
+    }
 }

@@ -16,7 +16,8 @@ module lendoor::reserve {
     use util_types::math_utils;
 
     use lendoor_config::reserve_config::{Self, ReserveConfig};
-    use lendoor_config::interest_rate_config::{InterestRateConfig};
+
+    use lendoor_config::interest_rate_config::InterestRateConfig;
     use lendoor_config::utils;
 
     use lendoor::controller_config;
@@ -137,17 +138,32 @@ module lendoor::reserve {
         farm_type: TypeInfo,
     }
 
-    public(friend) fun init(account: &signer) {
-        assert!(signer::address_of(account) == @lendoor, ERESERVE_NOT_ARIES);
-        assert!(!exists<Reserves>(signer::address_of(account)), ERESERVE_ALREADY_EXIST);
-        move_to(
-            account, 
-            Reserves {
-                stats: table::new(),
-            }
-        );
+    public entry fun init(account: &signer) {
+        init_if_needed(account);
     }
 
+    #[view]
+    public fun reserves_present(): bool {
+        exists<Reserves>(controller_config::host_addr())
+    }
+
+    /// Idempotent initializer for the global `Reserves` singleton.
+    /// Creates `Reserves` at the configured host address if it doesn't exist yet.
+    public(friend) fun init_if_needed(account: &signer) {
+        // Only the configured admin can initialize storage
+        controller_config::assert_is_admin(signer::address_of(account));
+        let host = controller_config::host_addr();
+        if (!exists<Reserves>(host)) {
+            move_to(account, Reserves { stats: table::new() });
+        };
+    }
+
+    #[view]
+    public fun reserves_exist(): bool {
+        let host = controller_config::host_addr();
+        exists<Reserves>(host)
+    }
+    
     #[view]
     public fun reserve_state<CoinType>(): ReserveDetails acquires Reserves {
         reserve_details(std_type<CoinType>())
@@ -155,7 +171,7 @@ module lendoor::reserve {
 
     #[test_only]
     public fun has_initiated(): bool {
-        exists<Reserves>(@lendoor)
+        exists<Reserves>(controller_config::host_addr())
     }
 
     public(friend) fun create<Coin0>(
@@ -198,7 +214,7 @@ module lendoor::reserve {
     // Make a copy of the `ReserveDetails`. It is fine that this function is public, since you can only read.
     public fun reserve_details(reserve_type_info: TypeInfo): ReserveDetails acquires Reserves {
         assert_reserves_exists();
-        let reserves = borrow_global<Reserves>(@lendoor);
+        let reserves = borrow_global<Reserves>(controller_config::host_addr());
         assert!(table::contains(&reserves.stats, reserve_type_info), ERESERVE_RESERVE_NOT_EXIST);
         let reserve_stats = table::borrow<TypeInfo, ReserveDetails>(
             &reserves.stats,
@@ -212,7 +228,7 @@ module lendoor::reserve {
         reserve_details: ReserveDetails
     ) acquires Reserves {
         assert_reserves_exists();
-        let reserves = borrow_global_mut<Reserves>(@lendoor);
+        let reserves = borrow_global_mut<Reserves>(controller_config::host_addr());
         if (table::contains<TypeInfo, ReserveDetails>(&reserves.stats, reserve_type_info)) {
             let val = table::borrow_mut<TypeInfo, ReserveDetails>(
                 &mut reserves.stats,
@@ -377,7 +393,7 @@ module lendoor::reserve {
     ): Coin<LP<Coin0>> acquires Reserves, ReserveCoinContainer {
         let reserve_details = reserve_details(type_info<Coin0>());
 
-        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         check_stats_integrity<Coin0>(reserve_coins, &reserve_details);
 
         let amount = coin::value(&underlying_coin);
@@ -421,7 +437,7 @@ module lendoor::reserve {
         lp_coin: Coin<LP<Coin0>>
     ) : Coin<Coin0> acquires Reserves, ReserveCoinContainer {
         let reserve_details = reserve_details(type_info<Coin0>());
-        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         check_stats_integrity<Coin0>(reserve_coins, &reserve_details);
 
         let lp_amount = coin::value(&lp_coin);
@@ -458,14 +474,14 @@ module lendoor::reserve {
             ERESERVE_NO_ALLOW_COLLATERAL
         );
 
-        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         coin::merge<LP<Coin0>>(&mut coins_container.collateralised_lp_coin, lp_coin)
     }
 
     public(friend) fun remove_collateral<Coin0>(
         amount: u64
     ): Coin<LP<Coin0>> acquires ReserveCoinContainer {
-        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         coin::extract<LP<Coin0>>(&mut coins_container.collateralised_lp_coin, amount)
     }
 
@@ -503,7 +519,7 @@ module lendoor::reserve {
         reserve_details::borrow(&mut reserve_details, borrow_amount_with_fee);
         update_reserve_details(type_info<Coin0>(), reserve_details);
 
-        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
 
         let fee_coin = coin::extract<Coin0>(&mut coins_container.underlying_coin, fee_amount);
         let loan_coins = coin::extract<Coin0>(&mut coins_container.underlying_coin, amount);
@@ -531,7 +547,7 @@ module lendoor::reserve {
         let (actual_repay_amount, _) = reserve_details::repay(&mut reserve_details, max_repay_amount);
         update_reserve_details(type_info<Coin0>(), reserve_details);
 
-        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         let remaining_coin = coin::extract<Coin0>(&mut repaying_coin, max_repay_amount - actual_repay_amount);
         coin::merge<Coin0>(&mut coins_container.underlying_coin, repaying_coin);
 
@@ -541,12 +557,12 @@ module lendoor::reserve {
     }
 
     public(friend) fun withdraw_borrow_fee<Coin0>(): Coin<Coin0> acquires ReserveCoinContainer {
-        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         coin::extract_all<Coin0>(&mut coins_container.fee)
     }
 
     public(friend) fun withdraw_reserve_fee<Coin0>(): Coin<Coin0> acquires ReserveCoinContainer, Reserves {
-        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         let reserve_details = reserve_details(type_info<Coin0>());
         let reserve_fee_amount = reserve_details::withdraw_reserve_amount(&mut reserve_details);
         update_reserve_details(type_info<Coin0>(), reserve_details);
@@ -554,7 +570,7 @@ module lendoor::reserve {
     }
 
     public(friend) fun sync_cash_available<Coin0>() acquires ReserveCoinContainer, Reserves {
-        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coins_container = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         let reserve_details = reserve_details(type_info<Coin0>());
         let available_cash = coin::value(&mut coins_container.underlying_coin);
         reserve_details::set_total_cash_available(&mut reserve_details, (available_cash as u128));
@@ -594,7 +610,7 @@ module lendoor::reserve {
 
 
     fun assert_reserves_exists() {
-        assert!(exists<Reserves>(@lendoor), ERESERVE_NOT_EXIST);
+        assert!(exists<Reserves>(controller_config::host_addr()), ERESERVE_NOT_EXIST);
     }
 
     /// A portion of liquidation bonus will be reserved into the protocol treasury.
@@ -606,7 +622,7 @@ module lendoor::reserve {
         let fee_lp_amount = math_utils::mul_millionth_u64(coin::value(&withdrawal_lp_coin), liquidation_fee_millionth);
         let fee_lp_coins = coin::extract(&mut withdrawal_lp_coin, fee_lp_amount);
         let fee_coins = redeem(fee_lp_coins);
-        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor); 
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr()); 
         coin::merge(&mut reserve_coins.fee, fee_coins);
 
         withdrawal_lp_coin
@@ -620,7 +636,7 @@ module lendoor::reserve {
         let withdraw_fee_millionth = reserve_config::withdraw_fee_hundredth_bips(&reserve_config(reserve_type_info));
         let fee_amount = math_utils::mul_millionth_u64(coin::value(&withdrawal_coin), withdraw_fee_millionth);
         let fee_coins = coin::extract(&mut withdrawal_coin, fee_amount);
-        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let reserve_coins = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         coin::merge(&mut reserve_coins.fee, fee_coins);
 
         withdrawal_coin
@@ -639,7 +655,7 @@ module lendoor::reserve {
     }
 
     spec fun spec_reserve_balance<Coin0>(): num {
-        let coin_store = global<ReserveCoinContainer<Coin0>>(@lendoor);
+        let coin_store = global<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         coin::value<Coin0>(coin_store.underlying_coin)
     }
 
@@ -665,7 +681,7 @@ module lendoor::reserve {
         reserve_details::inc_total_lp_supply(&mut det, (lp_fee as u128));
         update_reserve_details(type_info<Coin0>(), det);
 
-        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         let lp = coin::mint<LP<Coin0>>(lp_fee, &box.mint_capability);
         utils::deposit_coin_to<LP<Coin0>>(to, lp);
 
@@ -684,7 +700,7 @@ module lendoor::reserve {
         reserve_details::dec_total_lp_supply(&mut det, (amount as u128));
         update_reserve_details(type_info<Coin0>(), det);
 
-        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         utils::burn_coin<LP<Coin0>>(lp, &box.burn_capability);
 
         emit_sync_reserve_detail_event<Coin0>(&reserve_details(type_info<Coin0>()));
@@ -695,7 +711,7 @@ module lendoor::reserve {
     {
         if (loss == 0) { return; };
 
-        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(@lendoor);
+        let box = borrow_global_mut<ReserveCoinContainer<Coin0>>(controller_config::host_addr());
         let avail = coin::value(&box.underlying_coin);
         assert!(avail >= loss, ERESERVE_EXTERNAL_LOSS_TOO_BIG);
         let siphoned = coin::extract<Coin0>(&mut box.underlying_coin, loss);
@@ -710,6 +726,28 @@ module lendoor::reserve {
         emit_sync_reserve_detail_event<Coin0>(&reserve_details(type_info<Coin0>()));
     }
 
+    #[view]
+    public fun exists_for<Coin0>(): bool {
+        // The “host” where the singletons live is the admin saved in controller_config
+        let host = controller_config::host_addr();
+        exists<ReserveCoinContainer<Coin0>>(host)
+    }
+
+    public fun create_if_needed<Coin0>(
+        admin: &signer,
+        initial_exchange_rate: Decimal,
+        reserve_conf: ReserveConfig,
+        interest_rate_conf: InterestRateConfig
+    ): bool acquires Reserves {
+        // Ensures that the Reserves singleton exists before creating the specific reserve.
+        init_if_needed(admin);
+        if (exists_for<Coin0>()) {
+            false
+        } else {
+            create<Coin0>(admin, initial_exchange_rate, reserve_conf, interest_rate_conf);
+            true
+        }
+    }
 
 
 }

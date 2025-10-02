@@ -5,7 +5,6 @@ module lendoor::profile {
 
     use aptos_std::type_info::{Self, TypeInfo};
     use aptos_std::event::{Self};
-    use aptos_std::string_utils;
 
     use lendoor::credit_manager;
     use lendoor::reserve::{Self};
@@ -47,17 +46,6 @@ module lendoor::profile {
     /// When trying to repay 0 amount.
     const EPROFILE_REPAY_ZERO_AMOUNT: u64 = 9;
 
-    /// When the FarmingType is not Deposit or Borrow
-    const EPROFILE_INVALID_FARMING_TYPE: u64 = 10;
-
-    /// When the emode cateogry of the borrowing reserve is not same as profile.
-    const EPROFILE_EMODE_DIFF_WITH_RESERVE: u64 = 11;
-
-    /// Constants
-
-    const LIQUIDATION_CLOSE_AMOUNT: u64 = 2;
-
-    const LIQUIDATION_CLOSE_FACTOR_PERCENTAGE: u128 = 50;
 
     /// This is a resource that records a user's all deposits and borrows, 
     /// Mainly used for book keeping purpose.
@@ -146,7 +134,7 @@ module lendoor::profile {
         get_total_borrowing_power_from_profile_inner(profile, &no_emode)
     }
 
-    public(friend) fun get_total_borrowing_power_from_profile_inner(profile: &Profile, profile_emode_id: &Option<string::String>): Decimal {
+    public(friend) fun get_total_borrowing_power_from_profile_inner(profile: &Profile, _profile_emode_id: &Option<string::String>): Decimal {
         let borrowing_power = decimal::zero();
         let key = iterable_table::head_key(&profile.deposited_reserves);
         while (option::is_some(&key)) {
@@ -154,10 +142,8 @@ module lendoor::profile {
             let (val, _, next) = iterable_table::borrow_iter(
                 &profile.deposited_reserves, &type_info);
 
-            let ltv_pct: u8 = asset_ltv(profile_emode_id, &type_info);
-            let ltv = decimal::from_percentage((ltv_pct as u128));
-
-            let price: Decimal = asset_price(profile_emode_id, &type_info);
+            let ltv = decimal::zero();
+            let price: Decimal = decimal::one();
             let actual_amount = reserve::get_underlying_amount_from_lp_amount(
                 type_info,
                 val.collateral_amount
@@ -224,17 +210,17 @@ module lendoor::profile {
     ///
     /// This takes into account the `borrow_factor` which is based on an asset's
     /// volatility.
-    fun get_adjusted_borrowed_value_fresh_for_profile(profile: &Profile, profile_emode_id: &Option<string::String>): Decimal {
+    fun get_adjusted_borrowed_value_fresh_for_profile(profile: &Profile, _profile_emode_id: &Option<string::String>): Decimal {
         let total_risk_adjusted_borrow_value = decimal::zero();
         let key = iterable_table::head_key(&profile.borrowed_reserves);
         while (option::is_some(&key)) {
             let type_info = *option::borrow(&key);
             let (val, _, next) = iterable_table::borrow_iter(&profile.borrowed_reserves, &type_info);
 
-            let price: Decimal = asset_price(profile_emode_id, &type_info);
+            let price: Decimal = decimal::one();
             let borrowed_amount = reserve::get_borrow_amount_from_share_dec(type_info, val.borrowed_share);
             let borrow_value = decimal::mul(borrowed_amount, price);
-            let borrow_factor_pct = asset_borrow_factor(profile_emode_id, &type_info);
+            let borrow_factor_pct = reserve::borrow_factor(type_info);
             let risked_ajusted_borrow_value = decimal::div(
                 borrow_value, 
                 decimal::from_percentage((borrow_factor_pct as u128))
@@ -594,19 +580,9 @@ module lendoor::profile {
             borrowed_share_decimal: decimal::raw(borrowed_share),
         })
     }
+    // === Uncollateralized risk shims (mantienen compatibilidad con llamadas existentes) ===
 
-    public(friend) fun asset_borrow_factor(_profile_emode_id: &Option<string::String>, reserve_type: &TypeInfo): u8 {
-        reserve::borrow_factor(*reserve_type)
-    }
-
-    public(friend) fun asset_ltv(
-        _profile_emode_id: &Option<string::String>,
-        _reserve_type: &TypeInfo
-    ): u8 {
-        // In an uncollat mode it doensn't apply 
-        0
-    }
-
+    /// Precio 1.0 (escala 1e9) para activos; en uncollateralized no valoramos colateral on-chain.
     public(friend) fun asset_price(
         _profile_emode_id: &Option<string::String>,
         _reserve_type: &TypeInfo
@@ -614,24 +590,19 @@ module lendoor::profile {
         decimal::one()
     }
 
-    public(friend) fun emode_is_matching(profile_emode_id: &Option<string::String>, reserve_emode_id: &Option<string::String>): bool {
-        if (option::is_some(profile_emode_id) &&
-            option::is_some(reserve_emode_id) &&
-            *option::borrow(profile_emode_id) == *option::borrow(reserve_emode_id)
-        ) {
-            true
-        } else {
-            false
-        }
+    /// LTV = 0% para depósitos (no aportan poder de préstamo en este diseño).
+    public(friend) fun asset_ltv(
+        _profile_emode_id: &Option<string::String>,
+        _reserve_type: &TypeInfo
+    ): u8 {
+        0
     }
 
-    fun type_info_to_name(typ: TypeInfo): string::String {
-        string_utils::format3(
-            &b"{}::{}::{}",
-            type_info::account_address(&typ),
-            string::utf8(type_info::module_name(&typ)),
-            string::utf8(type_info::struct_name(&typ))
-        )
+    /// Borrow factor: reusa el configurado en la reserve.
+    public(friend) fun asset_borrow_factor(
+        _profile_emode_id: &Option<string::String>,
+        reserve_type: &TypeInfo
+    ): u8 {
+        reserve::borrow_factor(*reserve_type)
     }
-
 }

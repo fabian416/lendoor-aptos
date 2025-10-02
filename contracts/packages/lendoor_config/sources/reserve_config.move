@@ -31,9 +31,6 @@ module lendoor_config::reserve_config {
         }
     }
 
-    #[test_only]
-    public fun default_test_config(): ReserveConfig { default_config() }
-
     public fun new_reserve_config(
         loan_to_value: u8,
         liquidation_threshold: u8,

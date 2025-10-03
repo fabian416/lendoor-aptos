@@ -19,7 +19,7 @@ export function JrApyKPI({
   containerClassName = 'col-span-1',
   valueClassName = 'text-green-600',
 }: Props) {
-  const { juniorApyDisplay } = useUser();
+  //const { juniorApyDisplay } = useUser();
 
   const defaultTooltip = (
     <div>

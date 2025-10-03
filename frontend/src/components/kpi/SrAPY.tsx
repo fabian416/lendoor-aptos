@@ -21,7 +21,7 @@ export function SrApyKPI({
   containerClassName = 'col-span-1',
   valueClassName = 'text-green-600',
 }: Props) {
-  const { seniorApyDisplay } = useUser();
+  //const { seniorApyDisplay } = useUser();
 
   const defaultTooltip = (
     <div>

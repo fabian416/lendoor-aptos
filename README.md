@@ -8,7 +8,6 @@
   <strong>Lendoor</strong> is a decentralized money market on <strong>Aptos</strong> that enables <strong>uncollateralized lending</strong> using <strong>zkMe</strong> proof‑of‑identity and a built‑in <strong>credit score</strong>. Capital is split into <strong>risk tranches</strong> (Senior / Junior) with a configurable waterfall.
 </p>
 
-
 > This repository contains:
 > - **Move packages** (core protocol + configs + utilities)
 > - **Frontend** (Vite + React)
@@ -16,275 +15,214 @@
 
 ---
 
-## 🔍 What It Does
+## 🚀 Deployed Contracts (Aptos **Testnet**)
 
-**Goal:** Unlock **credit without collateral** on Aptos.
+> These are live testnet addresses you can use end‑to‑end.
 
-**Borrowers** present zkMe proofs that attest to identity and creditworthiness (without revealing sensitive data).  
-**Lenders** deposit into **Senior** or **Junior** tranches and earn risk‑adjusted yield. Protocol fees and tranche fees are configurable on‑chain.
+- **Lendoor package (core modules)**: `0x9ffa31f2da2afe48612e1d04b37733987130df53db211cecbd26002b0832441a`
+- **USDC (testnet)**: `0xa8fffd614c952e1b8febb99c4e6a8f394cda619c1591ac12256b33f2df73c7b9`
+- **Wrapped USDC type (WUSDC)**: `0x9ffa31f2da2afe48612e1d04b37733987130df53db211cecbd26002b0832441a::wusdc::WUSDC`
+
+Keep these in sync with your `.env` files (see **Configuration**).
 
 ---
 
-## 🧪 How It Works
+## 🔍 What It Does (Essentials)
 
-1. **Identity & Credit (zkMe)**  
-   Users produce a zkMe proof that attests to identity/KYC and a **credit score**. The backend verifies this proof and allows the app to size a **borrow limit**.
+- **Borrowers**: submit zkMe proofs (identity/KYC + score) to unlock a credit line **without collateral**.
+- **Lenders**: supply to **Senior** (lower risk) or **Junior** (first‑loss) tranches and earn risk‑adjusted yield.
+- **Protocol**: on‑chain, modular Move code with configurable **interest model**, **reserve params**, and **tranche split**.
 
-2. **On‑chain Configuration**  
-   The protocol has on‑chain configs for **interest rate curve**, **reserve parameters**, and **tranche split (bps + junior address)**. Admins are checked by `controller_config` during updates.
+---
 
-3. **Borrow / Lend Flow**  
-   - **Lenders** choose **Senior** (lower risk) or **Junior** (higher risk) liquidity.  
-   - **Borrowers** draw credit against zkMe‑backed score, paying variable rates determined by the utilization‑based interest model.  
-   - A **tranche manager** syncs profit/loss and mints fee shares to the junior address according to configured bps.
+## 🧪 How It Works (Short)
+
+1. **zkMe identity & score** → backend verifies; frontend gates borrow based on score/limits.
+2. **On‑chain configs** → admin‑gated setters for interest curve, reserve params, and per‑asset tranche split.
+3. **Accounting** → tranche manager syncs TVL deltas and mints/ burns LP to share profit or absorb losses.
 
 ---
 
 ## 🧱 Protocol Architecture (Move)
 
-This repo uses **3 Move packages** to keep code modular:
-
 ```
 /contracts
 ├─ Move.toml
 ├─ sources/                         ← core (lendoor) modules
-│  ├─ controller.move
-│  ├─ controller_config.move
-│  ├─ credit_manager.move
-│  ├─ fa_to_coin_wrapper.move
-│  ├─ junior_vault.move
-│  ├─ profile.move
-│  ├─ reserve.move
-│  ├─ reserve_details.move
-│  ├─ tranche_config.move
-│  └─ tranche_manager.move
+│  ├─ controller.move               ← entrypoints (deposit/withdraw/borrow), events, admin ops
+│  ├─ controller_config.move        ← admin & host discovery; access control
+│  ├─ credit_manager.move           ← per‑user credit lines & scores (uncollateralized limits)
+│  ├─ fa_to_coin_wrapper.move       ← FA <-> Coin wrapper (resource account)
+│  ├─ junior_vault.move             ← junior vault (jUSD shares) & first‑loss logic
+│  ├─ profile.move                  ← user books: collateral LP & borrowed shares
+│  ├─ reserve.move                  ← mint/redeem LP, borrow/repay, fees
+│  ├─ reserve_details.move          ← interest accrual & math (1e9 fixed‑point)
+│  ├─ tranche_config.move           ← per‑asset junior addr + bps
+│  └─ tranche_manager.move          ← profit/loss sync, fee share mint/burn
 └─ packages/
-   ├─ util_types/                   ← shared utilities (decimal, maps, iterable table, math utils, pair)
-   │  └─ sources/
-   │     ├─ decimal.move
-   │     ├─ iterate_table.move
-   │     ├─ map.move
-   │     ├─ math_utils.move
-   │     └─ pair.move
-   └─ lendoor_config/              ← protocol config types & setters
-      └─ sources/
-         ├─ interest_rate.move
-         ├─ reserve_config.move
-         └─ utils.move
+   ├─ util_types/                   ← decimal, maps, iterable table, math utils, pair
+   └─ lendoor_config/               ← config types & setters (reserve + interest)
 ```
 
-### Key Modules (Core package: `lendoor`)
-
-- `controller_config.move`  
-  Stores the **admin** address and enforces access control. Typical use pattern:
-  ```move
-  public fun assert_is_admin(addr: address) acquires ControllerConfig {
-      assert!(is_admin(addr), ECONTROLLER_ADMIN_MISMATCH);
-  }
-  ```
-  > Many entry functions (e.g., `update_reserve_config`, `update_interest_rate_config`) call `assert_is_admin` to gate updates.
-
-- `tranche_config.move`  
-  Stores **per‑asset** junior address and tranche bps. We use `aptos_std::type_info` to key by the asset type:
-  ```move
-  struct TrancheCfg has copy, drop, store {
-      junior_addr: address,
-      tranche_bps: u16,
-  }
-  ```
-  > The storage address is `@lendoor` (core package’s address), so ensure your **named address** `lendoor` is resolved to your publisher address when compiling/publishing.
-
-- `tranche_manager.move`  
-  Tracks **total assets**, detects **profit/loss deltas**, and can **mint junior fee shares** or apply external losses. It uses `reserve_details` for totals and synchronizes before applying effects.
-
-- `reserve.move` & `reserve_details.move`  
-  Handle the money‑market mechanics: deposits, withdrawals, borrow/repay, fees, interest accrual, and conversion between **LP** shares and underlying `Coin<T>` amounts.
-
-- `controller.move`, `credit_manager.move`, `profile.move`, `fa_to_coin_wrapper.move`, `junior_vault.move`  
-  Extensions around roles, user bookkeeping, optional FA wrappers, and junior tranche vault flows.
-
-### Config Package (`lendoor_config`)
-
-- `interest_rate.move`  
-  Defines `InterestRateConfig` (min/optimal/max borrow rate, optimal utilization) and emits update events.
-
-- `reserve_config.move`  
-  Defines `ReserveConfig` (LTV, liquidation thresholds/bonuses/fees, reserve ratios, deposit/borrow limits, flags).
-
-- `utils.move`  
-  Helpers for config creation or validation.
-
-> The core package imports these types; admin paths update them via gated entry functions.
-
-### Utilities Package (`util_types`)
-
-- `decimal.move`  
-  Fixed‑point arithmetic with **1e9 scale** (`SCALE = 1_000_000_000`), plus helpers like `from_bips`, `mul_div`, etc.
-
-- `iterate_table.move`, `map.move`  
-  Thin wrappers on `aptos_std` maps to support iteration or updates without requiring `drop` on `V` unnecessarily.
-
-- `math_utils.move`  
-  Convenience math: `mul_millionth_u64`, `mul_percentage_u64`, `u64_max()`.
-
-- `pair.move`  
-  Generic `Pair<A, B>` with convenience accessors.
+### Why it’s safe(‑ish) to operate
+- **Admin gating**: `controller_config.assert_is_admin` guards all config/keeper paths.
+- **Reserves**: singletons live at `host_addr()`; accounting enforces supply/cash/LP integrity.
+- **Tranches**: junior takes first loss; profits flow via `mint_tranche_fee_shares` bps to junior.
 
 ---
 
 ## 🧰 Dev Environment
 
 ### Prerequisites
-- Node 22+
-- Yarn
-- Aptos toolchain available via `@aptos-labs/ts-sdk` (the scripts use the CLI entry wrapped by the SDK)
+- Node 22+ & Yarn
+- Aptos toolchain (via `@aptos-labs/ts-sdk`)
 
-### 🚀 Smart Contracts Deploy (Move, Aptos)
+### Contracts — publish & ops
+Two options:
 
-We split publishing into **three steps** to make dependencies explicit and keep payloads small. All scripts write object addresses to `.env`.
-
--  util_types
--  lendoor_config
--  lendoor
-
-
-
-> But you can run a single pipeline:
-> ```bash
-> cd contracts
-> cp .env.example .env
-> yarn move:publish
-> ```
-> which deploy the three contracts **sequentially**.
-
-### Required `.env` (under `contracts/`)
-```dotenv
-# network
-VITE_APP_NETWORK=devnet   # or testnet/mainnet
-
-# publisher account
-VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS=0x...
-VITE_MODULE_PUBLISHER_ACCOUNT_PRIVATE_KEY=0x...
-
-# will be set by scripts
-VITE_UTIL_TYPES_ADDR=0x...
-VITE_LENDOOR_CONFIG_ADDR=0x...
-VITE_LENDOOR_ADDR=0x...
+**One‑shot pipeline**
+```bash
+cd contracts
+yarn install
+cp .env.example .env   # fill variables below
+yarn move:publish
+```
+**Manual scripts** (useful while iterating)
+```bash
+cd contracts
+node scripts/move/publish_util_types.js
+node scripts/move/publish_config.js
+node scripts/move/publish_lendoor.js
+node scripts/move/init.js           # bootstrap controller host/admin
+# other helpers:
+node scripts/move/deposit_fa.js
+node scripts/move/withdraw_fa.js
+node scripts/move/borrow.js
+node scripts/move/upgrade.js
 ```
 
-### Troubleshooting
-- **Package >60KB**: our scripts use `--included-artifacts none` and chunked publish (when needed) via the SDK CLI wrapper.
-- **Unresolved named addresses**: ensure your `Move.toml` in each package has `[addresses]` with the **symbols** you reference (`lendoor`, `lendoor_config`, `util_types`). The publish scripts resolve them to concrete addresses.
+> The **`contracts/scripts/move/`** directory is intentionally included so you can trigger common on‑chain actions without the UI during local/testnet testing.
 
-### 🖥 Frontend
-
-A lightweight React app for **Borrow** and **Lend**:
+### Frontend
 ```bash
 cd frontend
 yarn install
-cp .env.example .env
+cp .env.example .env   # set backend URL & contract addresses
 yarn dev
 ```
-- Wallet connect, tranche views, basic KPIs (Base APY, Limits, Scores, Senior/Junior APY).
-- Calls the backend for zkMe proof flow and the contracts for on‑chain state.
+- Minimal app with **Borrow**/**Lend** flows and KPIs (Base APY, Limits, Scores, Sr/ Jr APY).
+- **Hooks** live under `src/hooks/**` and encapsulate **all Aptos interactions** (reads/transactions), e.g.:
+  - `hooks/borrow/*` for borrowing/repay
+  - `hooks/senior/*` and `hooks/junior/*` for LP deposit/withdraw, yields
+  - Shared providers in `src/providers/*` (wallet, user, move module)
 
-### 🛠 Backend (NestJS)
-
-The backend provides endpoints to handle the **zkMe** credential flow (issue, verify, and store proof status), then your frontend can gate borrowing with that status.
-
+### Backend (NestJS)
 ```bash
 cd backend
 yarn install
-cp .env.example .env
+cp .env.example .env   # zkMe credentials + addresses
 yarn dev
 ```
+- Handles the zkMe flow (issue/verify/store) and exposes status so the UI can gate borrowing.
 
 ---
 
-## 🧪 Selected Code Notes
+## ⚙️ Configuration
 
-### Admin‑Gated Config Updates
-```move
-public entry fun update_reserve_config<Coin0>(
-    admin: &signer,
-    loan_to_value: u8,
-    liquidation_threshold: u8,
-    liquidation_bonus_bips: u64,
-    liquidation_fee_hundredth_bips: u64,
-    borrow_factor: u8,
-    reserve_ratio: u8,
-    borrow_fee_hundredth_bips: u64,
-    withdraw_fee_hundredth_bips: u64,
-    deposit_limit: u64,
-    borrow_limit: u64,
-    allow_collateral: bool,
-    allow_redeem: bool,
-) {
-    controller_config::assert_is_admin(signer::address_of(admin));
-    let new_reserve_config = reserve_config::new_reserve_config(
-        loan_to_value,
-        liquidation_threshold,
-        liquidation_bonus_bips,
-        liquidation_fee_hundredth_bips,
-        borrow_factor,
-        reserve_ratio,
-        borrow_fee_hundredth_bips,
-        withdraw_fee_hundredth_bips,
-        deposit_limit,
-        borrow_limit,
-        allow_collateral,
-        allow_redeem,
-    );
-    reserve::update_reserve_config<Coin0>(new_reserve_config);
-    event::emit(UpdateReserveConfigEvent<Coin0> {
-        signer_addr: signer::address_of(admin),
-        config: new_reserve_config,
-    });
-}
+### Contracts `.env` (under `contracts/`)
+Use these **variable names** (matches our scripts). Do **not** commit real secrets.
+
+```dotenv
+# basic
+PROJECT_NAME=lendoor-aptos
+VITE_APP_NETWORK=testnet        # devnet | testnet | mainnet
+VITE_APTOS_API_KEY=""           # optional
+
+# publisher account (local dev only)
+VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS=0x...
+VITE_MODULE_PUBLISHER_ACCOUNT_PRIVATE_KEY=0x...    # DO NOT COMMIT REAL KEYS
+
+# FA / module
+VITE_FA_CREATOR_ADDRESS=0x...
+VITE_FA_ADDRESS=0x...           # fill after creating a fungible asset (optional flow)
+VITE_MODULE_ADDRESS=0x...       # package addr if needed by tooling
+
+# misc flags
+VITE_SKIP_IRYS=true
+VITE_PLACEHOLDER_ICON=https://placehold.co/512x512
+SKIP_SIMULATION=1
+
+# populated by scripts after publish
+VITE_UTIL_TYPES_ADDRESS=0x...
+VITE_CONFIG_ADDRESS=0x...
+VITE_LENDOOR_ADDRESS=0x...
+VITE_FA_METADATA_OBJECT=0x...
 ```
-- Uses `controller_config::assert_is_admin` to gate.  
-- Emits an event with the new config struct.
 
-### Tranche Registry (Per‑Asset)
-```move
-struct TrancheCfg has copy, drop, store { junior_addr: address, tranche_bps: u16 }
+> **Testnet addresses to reuse** (see “Deployed Contracts”):  
+> `VITE_LENDOOR_ADDRESS=0x9ffa31f2da2afe48612e1d04b37733987130df53db211cecbd26002b0832441a`
 
-public entry fun set_for<Coin0>(
-    admin: &signer,
-    junior_addr: address,
-    tranche_bps: u16
-) acquires TrancheByAsset {
-    controller_config::assert_is_admin(signer::address_of(admin));
-    let s = borrow_global_mut<TrancheByAsset>(@lendoor);
-    let key = type_of<Coin0>();
-    if (table::contains(&s.map, key)) {
-        let cfg_ref = table::borrow_mut(&mut s.map, key);
-        *cfg_ref = TrancheCfg { junior_addr, tranche_bps };
-    } else {
-        table::add(&mut s.map, key, TrancheCfg { junior_addr, tranche_bps });
-    };
-}
+### Frontend `.env` (under `frontend/`)
+```dotenv
+VITE_PUBLIC_BACKEND_URL=http://localhost:5001
+
+# contracts (testnet)
+VITE_LENDOOR_ADDRESS=0x9ffa31f2da2afe48612e1d04b37733987130df53db211cecbd26002b0832441a
+VITE_USDC_ADDRESS=0xa8fffd614c952e1b8febb99c4e6a8f394cda619c1591ac12256b33f2df73c7b9
+
+# zkMe
+VITE_ZK_ME_APP_ID=...
+VITE_ZK_ME_PROGRAM_NO=...
 ```
-- Stores **junior** parameters keyed by `Coin0` type via `type_of<Coin0>()`.
+
+### Backend `.env` (under `backend/`)
+```dotenv
+BASE_URL=http://localhost:5001
+
+# contracts (testnet)
+LENDOOR_CONTRACT=0x9ffa31f2da2afe48612e1d04b37733987130df53db211cecbd26002b0832441a
+USDC_ADDRESS=0xa8fffd614c952e1b8febb99c4e6a8f394cda619c1591ac12256b33f2df73c7b9
+USDC_MODULE_ADDRESS=0x5e0116b73251d84452a32c12ec854abf1b6671684a7bcafa15ffe3b0327075d6
+WUSDC_TYPE=0x9ffa31f2da2afe48612e1d04b37733987130df53db211cecbd26002b0832441a::wusdc::WUSDC
+WUSDC_DECIMALS=6
+
+# local signer (dev only)
+PRIVATE_KEY=0x...
+
+# zkMe
+ZK_ME_APP_ID=...
+ZK_ME_PROGRAM_NO=...
+ZK_ME_API_KEY=...
+ZK_ME_API_MODE_PERMISSION=1
+```
 
 ---
 
-## 📁 Repo Structure (Monorepo)
+## 📁 Monorepo at a Glance
 
 ```
 /backend        → NestJS API (zkMe integration, proof flow)
-/contracts      → Move packages (lendoor core, lendoor_config, util_types) + publish scripts
+/contracts      → Move packages (core + config + utils) + scripts to publish & test
 /frontend       → Vite + React + Tailwind (Borrow / Lend UI, KPIs)
 ```
 
 ---
 
-## 🧭 Roadmap
+## 🔑 Key Smart‑Contract Notes (just the useful bits)
 
-- Additional zkMe attributes / credit factors.
-- More reserve types & assets.
-- Liquidation bots & keepers.
-- Cross‑package upgrades via object packages (Aptos best practice).
+- **Access control**: all mutating admin/keeper calls are gated by `controller_config::assert_is_admin`.
+- **Reserves**: LP mint/redeem uses a TVL‑based exchange rate; fees: borrow, withdraw, liquidation. Integrity checks ensure on‑chain cash and LP supply match accounting.
+- **Credit lines**: `credit_manager` stores per‑user **score** and **per‑asset limits**; hooks are called on borrow/repay to keep usage in sync.
+- **Tranches**: `tranche_config` defines junior address & bps; `tranche_manager` measures P&L and applies **first‑loss** to junior or mints fee LP for profits.
+- **FA wrapper**: `fa_to_coin_wrapper` bridges FA <-> Coin for wrapped assets; uses a resource account signer and metadata object.
+
+---
+
+## ⚠️ Security & Disclaimers
+
+- This is research/experimental code on **testnet**. **Do not** use with real funds.
+- Never commit private keys or zkMe credentials. Use `.env` and secrets management.
+- Run audits and add rate‑limits/role separation before mainnet.
 
 ---
 

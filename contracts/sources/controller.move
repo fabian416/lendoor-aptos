@@ -36,6 +36,10 @@ module lendoor::controller {
     /// When the account is not Aries Markets Account. 
     const ECONTROLLER_NOT_ARIES: u64 = 2;
 
+    const E_BORROW_ZERO: u64 = 100;
+
+    const E_CREDIT_DENIED: u64 = 101;
+
 
     #[event]
     struct AddReserveEvent<phantom CoinType> has drop, store  {
@@ -43,12 +47,6 @@ module lendoor::controller {
         initial_exchange_rate_decimal: u128,
         reserve_conf: reserve_config::ReserveConfig,
         interest_rate_conf: interest_rate_config::InterestRateConfig,
-    }
-    
-    #[event]
-    struct RegisterUserEvent has drop, store {
-        user_addr: address,
-        default_profile_name: string::String,
     }
 
     #[event]
@@ -131,34 +129,6 @@ module lendoor::controller {
         in_borrow_amount: u64,
         out_deposit_amount: u64,
         out_repay_amount: u64,
-    }
-
-    #[event]
-    struct UpsertPrivilegedReferrerConfigEvent has drop, store {
-        signer_addr: address,
-        claimant_addr: address,
-        fee_sharing_percentage: u8,
-    }
-
-    #[event]
-    struct UpdateReserveConfigEvent<phantom CoinType> has drop, store {
-        signer_addr: address,
-        config: reserve_config::ReserveConfig, 
-    }
-
-    #[event]
-    struct UpdateInterestRateConfigEvent<phantom CoinType> has drop, store {
-        signer_addr: address,
-        config: interest_rate_config::InterestRateConfig,
-    }
-
-    #[event]
-    struct ProfileEModeSet has drop, store {
-        user_addr: address,
-        profile_name: string::String,
-        // An empty string indicates exiting emode, 
-        // while any other non-empty string represents an active emode configuration.
-        emode_id: string::String,
     }
 
     #[event]
@@ -277,18 +247,9 @@ module lendoor::controller {
     /// Register the user and also create a default `Profile` with the given name.
     /// We requires that a name is given instead of a default name such as "main" because it might be
     /// possible for user to already have a `ResourceAccount` that collides with our default name.
-    public entry fun register_user(
-        account: &signer,
-        default_profile_name: vector<u8>
-    ) {
-        // Only one profile per user:
+    public entry fun register_user(account: &signer, _default_profile_name: vector<u8>) {
         profile::init(account);
-
-        // You can keep the event for telemetry (the name is no longer used on-chain)
-        event::emit(RegisterUserEvent {
-            user_addr: signer::address_of(account),
-            default_profile_name: string::utf8(default_profile_name),
-        })
+        // (if you also want to emit the event, use it and the warning will disappear)
     }
     /// Mint yield bearing LP tokens for a given user. The minted LP tokens does not increase the borrowing power.
     /// Instead it will be return to user's wallet. If the users would like to increase their borrowing power,
@@ -575,10 +536,6 @@ module lendoor::controller {
         );
         reserve::update_reserve_config<Coin0>(new_reserve_config);
 
-        event::emit(UpdateReserveConfigEvent<Coin0> {
-            signer_addr: signer::address_of(admin),
-            config: new_reserve_config,
-        });
     }
 
     /// Admin-only: forces `total_cash_available` in reserve details to match
@@ -606,11 +563,7 @@ module lendoor::controller {
             optimal_utilization
         );
         reserve::update_interest_rate_config<Coin0>(new_interest_rate_config);
-
-        event::emit(UpdateInterestRateConfigEvent<Coin0> {
-            signer_addr: signer::address_of(admin),
-            config: new_interest_rate_config,
-        });
+        
     }
 
     /// Admin-only: withdraws accumulated **borrow fees** for `Coin0` to the admin account.
@@ -682,5 +635,28 @@ module lendoor::controller {
         if (!reserve::reserves_exist()) {
             reserve::init_if_needed(account);
         };
+    }
+
+    /// Lend FA to the user
+    /// - `Coin0` is the underlying asset (e.g., WUSDC).
+    /// - `profile` is received for compatibility with your UI/scripts.
+    public entry fun borrow_fa<Coin0>(
+        user: &signer,
+        _profile: vector<u8>, // we leave it for compatibility, but we don't use it
+        amount: u64
+    ) {
+        assert!(amount > 0, E_BORROW_ZERO);
+        profile::ensure_for_signer(user);
+        let addr = signer::address_of(user);
+
+        // Settle debt in Profile and calculate how much comes from collateral and how much is a loan
+        let (withdraw_amt, borrow_amt) =
+            profile::withdraw(addr, reserve::type_info<Coin0>(), amount, /*allow_borrow=*/ true);
+
+        // Move underlying from the reserve
+        let coin = withdraw_from_reserve<Coin0>(withdraw_amt, borrow_amt);
+
+        // Deliver to the user in FA
+        fa_to_coin_wrapper::coin_to_fa<Coin0>(coin, user);
     }
 }

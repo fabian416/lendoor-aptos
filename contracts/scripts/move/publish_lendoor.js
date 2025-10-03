@@ -21,12 +21,12 @@ function run(cmd){
   const publisher = need("VITE_MODULE_PUBLISHER_ACCOUNT_ADDRESS");
   const privKey   = need("VITE_MODULE_PUBLISHER_ACCOUNT_PRIVATE_KEY");
 
-  // deps ya publicados previamente
+  // deps already published previously
   const utilTypesAddr    = need("VITE_UTIL_TYPES_ADDRESS");
   const lendoorConfigAddr= need("VITE_CONFIG_ADDRESS");
 
-  // Publica **bajo tu cuenta** usando el CLI:
-  // Nota: algunas versiones del CLI no aceptan --included-artifacts; no lo uses.
+  // Publish **under your account** using the CLI:
+  // Note: some versions of the CLI do not accept --included-artifacts; do not use it.
   const named = [
     `lendoor=${publisher}`,
     `util_types=${utilTypesAddr}`,
@@ -41,8 +41,8 @@ function run(cmd){
     `--private-key ${privKey}`
   );
 
-  // Como publicaste bajo TU cuenta, @lendoor = publisher.
-  // Graba eso en el .env para que init.js y el front usen ese address.
+  // Since you published under YOUR account, @lendoor = publisher.
+  // Save that to .env so that init.js and the frontend use that address.
   const line = `VITE_LENDOOR_ADDRESS=${publisher}\n`;
   const envPath = ".env";
   let env = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
@@ -51,6 +51,6 @@ function run(cmd){
     : (env.endsWith("\n") ? env + line : env + "\n" + line);
   fs.writeFileSync(envPath, env, "utf8");
 
-  console.log(`\n✅ lendoor publicado bajo tu cuenta: ${publisher}`);
-  console.log(`🔧 .env actualizado: VITE_LENDOOR_ADDRESS=${publisher}`);
+  console.log(`\n✅ lendoor published under your account: ${publisher}`);
+  console.log(`🔧 .env updated: VITE_LENDOOR_ADDRESS=${publisher}`);
 })();

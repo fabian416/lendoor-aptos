@@ -10,7 +10,7 @@ function runOk(cmd, ignoreSubstrings = []) {
   catch (e) {
     const msg = String((e.stderr || e.stdout || e.message || e) ?? "");
     if (ignoreSubstrings.some(s => msg.includes(s))) {
-      console.log("ℹ️  Ignorando error esperado/idempotente:", ignoreSubstrings.find(s=>msg.includes(s)));
+      console.log("ℹ️  Ignoring expected/idempotent error:", ignoreSubstrings.find(s=>msg.includes(s)));
       return false;
     }
     throw e;
@@ -34,11 +34,11 @@ function hexFromUtf8(s){ return "0x" + Buffer.from(s, "utf8").toString("hex"); }
   const adminKey  = need("VITE_MODULE_PUBLISHER_ACCOUNT_PRIVATE_KEY");
   const pkgAddr   = need("VITE_LENDOOR_ADDRESS");
   const faMetaObj = need("VITE_FA_METADATA_OBJECT");
-  const juniorBps = parseInt(process.env.VITE_JUNIOR_BPS || "2000", 10); // 20% por defecto
+  const juniorBps = parseInt(process.env.VITE_JUNIOR_BPS || "2000", 10); // 20% by default
 
   const TYPE_WUSDC = `${pkgAddr}::wusdc::WUSDC`;
 
-  // ========= 1) ControllerConfig (idempotente) =========
+  // ========= 1) ControllerConfig (idempotent) =========
   const cfgExists = viewBool({
     fn: `${pkgAddr}::controller_config::config_present_at`,
     args: [`address:${adminAddr}`],
@@ -47,19 +47,19 @@ function hexFromUtf8(s){ return "0x" + Buffer.from(s, "utf8").toString("hex"); }
   if (!cfgExists) {
     run(`aptos move run --function-id ${pkgAddr}::controller::init --args address:${adminAddr} --assume-yes --url ${url} --private-key ${adminKey}`);
   } else {
-    console.log("ℹ️  controller_config ya existía. Saltando init.");
+    console.log("ℹ️  controller_config already existed. Skipping init.");
   }
 
-  // ========= 2) FASigner (idempotente con seed única) =========
+  // ========= 2) FASigner (idempotent with unique seed) =========
   const signerExists = viewBool({ fn: `${pkgAddr}::fa_to_coin_wrapper::fa_signer_exists`, url });
   if (!signerExists) {
     const seed = hexFromUtf8(`FASigner_${Date.now()}`);
     run(`aptos move run --function-id ${pkgAddr}::controller::init_wrapper_fa_signer_with_seed --args hex:${seed} --assume-yes --url ${url} --private-key ${adminKey}`);
   } else {
-    console.log("ℹ️  FASigner ya existía. Saltando creación del resource account.");
+    console.log("ℹ️  FASigner already existed. Skipping resource account creation.");
   }
 
-  // ========= 3) Pair FA <-> WUSDC (idempotente) =========
+  // ========= 3) Pair FA <-> WUSDC (idempotent) =========
   const wrappedExists = viewBool({
     fn: `${pkgAddr}::fa_to_coin_wrapper::is_fa_wrapped_coin`,
     typeArgs: [TYPE_WUSDC],
@@ -68,31 +68,31 @@ function hexFromUtf8(s){ return "0x" + Buffer.from(s, "utf8").toString("hex"); }
   if (!wrappedExists) {
     run(`aptos move run --function-id ${pkgAddr}::controller::init_wrapper_coin_addr --type-args ${TYPE_WUSDC} --args address:${faMetaObj} --assume-yes --url ${url} --private-key ${adminKey}`);
   } else {
-    console.log("ℹ️  WUSDC ya estaba inicializado en el wrapper. Saltando add_fa.");
+    console.log("ℹ️  WUSDC was already initialized in the wrapper. Skipping add_fa.");
   }
 
-  // ========= 4) Reserves singleton (una sola vez) =========
-  // Asegúrate de que reserve::init sea 'entry' en tu módulo.
+  // ========= 4) Reserves singleton (once) =========
+  // Make sure reserve::init is an 'entry' in your module.
   runOk(
     `aptos move run --function-id ${pkgAddr}::reserve::init --assume-yes --url ${url} --private-key ${adminKey}`,
     [
       "ERESERVE_ALREADY_EXIST",
-      "Failed to move resource into",                 // recurso ya existe
-      "EXECUTE_ENTRY_FUNCTION_CALLED_ON_NON_ENTRY_FUNCTION" // si aún no lo hiciste entry, te avisará
+      "Failed to move resource into",                 // resource already exists
+      "EXECUTE_ENTRY_FUNCTION_CALLED_ON_NON_ENTRY_FUNCTION" // if you haven't made it an entry function yet, it will notify you
     ]
   );
 
-  // ========= 5) tranche_config (crear mapa una vez) =========
+  // ========= 5) tranche_config (create map once) =========
   runOk(
     `aptos move run --function-id ${pkgAddr}::tranche_config::init --assume-yes --url ${url} --private-key ${adminKey}`,
     ["Failed to move resource into"]
   );
 
-  // ========= 6) Set split junior (bps) para WUSDC =========
-  // OJO: función se llama set_for (no set_for_coin). Puedes re-ejecutarla: sobreescribe.
+  // ========= 6) Set junior split (bps) for WUSDC =========
+  // NOTE: the function is called set_for (not set_for_coin). You can re-run it: it overwrites.
   run(`aptos move run --function-id ${pkgAddr}::tranche_config::set_for --type-args ${TYPE_WUSDC} --args address:${adminAddr} u16:${juniorBps} --assume-yes --url ${url} --private-key ${adminKey}`);
 
-  // ========= 7) Crear la Reserve de WUSDC =========
+  // ========= 7) Create the WUSDC Reserve =========
   let reserveExists = false;
   try {
     reserveExists = viewBool({ fn: `${pkgAddr}::reserve::exists_for`, typeArgs: [TYPE_WUSDC], url });
@@ -100,20 +100,20 @@ function hexFromUtf8(s){ return "0x" + Buffer.from(s, "utf8").toString("hex"); }
   if (!reserveExists) {
     run(`aptos move run --function-id ${pkgAddr}::controller::add_reserve --type-args ${TYPE_WUSDC} --assume-yes --url ${url} --private-key ${adminKey}`);
   } else {
-    console.log("ℹ️  La reserve de WUSDC ya existe. Saltando creación.");
+    console.log("ℹ️  The WUSDC reserve already exists. Skipping creation.");
   }
 
-  // ========= 8) Junior vault para WUSDC (después de add_reserve) =========
+  // ========= 8) Junior vault for WUSDC (after add_reserve) =========
   runOk(
     `aptos move run --function-id ${pkgAddr}::junior::init_for --type-args ${TYPE_WUSDC} --assume-yes --url ${url} --private-key ${adminKey}`,
-    ["Failed to move resource into"] // si ya existe JVault<Coin0>
+    ["Failed to move resource into"] // if JVault<Coin0> already exists
   );
 
-  // ========= 9) Verificaciones =========
+  // ========= 9) Verifications =========
   run(`aptos move view --function-id ${pkgAddr}::fa_to_coin_wrapper::is_ready --type-args ${TYPE_WUSDC} --url ${url}`);
   try {
     run(`aptos move view --function-id ${pkgAddr}::reserve::reserve_state --type-args ${TYPE_WUSDC} --url ${url}`);
   } catch {
-    console.log("⚠️  reserve_state aún no disponible (si aborta, revisa que add_reserve haya pasado).");
+    console.log("⚠️  reserve_state not yet available (if it aborts, check that add_reserve has passed).");
   }
 })();

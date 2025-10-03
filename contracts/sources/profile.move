@@ -580,9 +580,9 @@ module lendoor::profile {
             borrowed_share_decimal: decimal::raw(borrowed_share),
         })
     }
-    // === Uncollateralized risk shims (mantienen compatibilidad con llamadas existentes) ===
+    // === Uncollateralized risk shims (maintain compatibility with existing calls) ===
 
-    /// Precio 1.0 (escala 1e9) para activos; en uncollateralized no valoramos colateral on-chain.
+    /// Price 1.0 (scale 1e9) for assets; in uncollateralized we do not value collateral on-chain.
     public(friend) fun asset_price(
         _profile_emode_id: &Option<string::String>,
         _reserve_type: &TypeInfo
@@ -590,7 +590,7 @@ module lendoor::profile {
         decimal::one()
     }
 
-    /// LTV = 0% para depósitos (no aportan poder de préstamo en este diseño).
+    /// LTV = 0% for deposits (they do not provide borrowing power in this design).
     public(friend) fun asset_ltv(
         _profile_emode_id: &Option<string::String>,
         _reserve_type: &TypeInfo
@@ -598,7 +598,7 @@ module lendoor::profile {
         0
     }
 
-    /// Borrow factor: reusa el configurado en la reserve.
+    /// Borrow factor: reuses the one configured in the reserve.
     public(friend) fun asset_borrow_factor(
         _profile_emode_id: &Option<string::String>,
         reserve_type: &TypeInfo

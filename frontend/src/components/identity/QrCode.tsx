@@ -15,13 +15,14 @@ import {
 
 import '@zkmelabs/widget/dist/style.css'
 import { ZkMeWidget, type Provider } from '@zkmelabs/widget'
+import { triggerCreditRefresh } from '@/lib/creditBus'
 
 type QRCodeViewProps = { onBack: () => void }
 
 const ACCESS_TOKEN_URL = `${BACKEND_URL}/zk-me/access-token`
 const VERIFY_URL       = `${BACKEND_URL}/zk-me/verify`
 
-// Cross-chain default suggested by zkMe docs
+// zkMe suggests Polygon chainId for cross-chain usage; not used for Aptos signing.
 const CHAIN_ID = '137'
 
 export default function QRCodeView({ onBack }: QRCodeViewProps) {
@@ -41,10 +42,9 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
   const [aptosAddr, setAptosAddr] = useState<string | null>(null)
   const [petraReady, setPetraReady] = useState(false)
 
-  /* ---------------------------------------------------------
-   * 1) Fetch a short-lived access token from your backend.
-   *    Your backend MUST send apiModePermission=1 (App-first).
-   * --------------------------------------------------------- */
+  /* --------------------------------------------------------------------------
+   * 1) Short-lived access token from your backend (server holds API key).
+   * ------------------------------------------------------------------------ */
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -56,8 +56,6 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
         if (!j?.accessToken) throw new Error('Malformed token response')
         tokenRef.current = j.accessToken
         if (!cancelled) setTokenReady(true)
-
-        // Optional: sanity log to catch appId mismatches between BE/FE during debug
         if (j.appId && APP_ID && j.appId !== APP_ID) {
           console.warn('[zkMe] AppId mismatch: backend=', j.appId, ' frontend=', APP_ID)
         }
@@ -68,24 +66,22 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
     return () => { cancelled = true }
   }, [])
 
-  /* ---------------------------------------------------------
-   * 2) Petra pre-flight (silent). If not authorized, show a
-   *    Connect button; this program REQUIRES an account.
-   * --------------------------------------------------------- */
+  /* --------------------------------------------------------------------------
+   * 2) Petra silent preflight to recover previously authorized address.
+   * ------------------------------------------------------------------------ */
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         const aptos = (window as any)?.aptos
         if (!aptos?.account) return
-        // Silent: returns address ONLY if user previously authorized this origin.
         const acc = await aptos.account().catch(() => null)
         if (acc?.address && !cancelled) {
           setAptosAddr(String(acc.address).toLowerCase())
           setPetraReady(true)
         }
       } catch {
-        // Ignore; we’ll ask for explicit connect.
+        // ignore
       }
     })()
     return () => { cancelled = true }
@@ -95,8 +91,8 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
     try {
       setLoading(true)
       const aptos = (window as any)?.aptos
-      if (!aptos?.connect) throw new Error('Petra not available in this browser')
-      const res = await aptos.connect() // prompts once
+      if (!aptos?.connect) throw new Error('Petra is not available in this browser')
+      const res = await aptos.connect() // user prompt
       const addr = (res?.address ?? (await aptos.account())?.address) as string | undefined
       if (!addr) throw new Error('No address returned by Petra')
       setAptosAddr(addr.toLowerCase())
@@ -109,17 +105,15 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
     }
   }
 
-  /* ---------------------------------------------------------
-   * 3) Provider for zkMe widget.
-   *    IMPORTANT: This MUST return the Aptos address, not [].
-   * --------------------------------------------------------- */
+  /* --------------------------------------------------------------------------
+   * 3) zkMe provider: must return the Aptos address.
+   * ------------------------------------------------------------------------ */
   const provider = useMemo<Provider>(() => ({
     async getAccessToken() {
       if (!tokenRef.current) throw new Error('Token not ready')
       return tokenRef.current
     },
     async getUserAccounts() {
-      // Defensive: try to recover the address if state is lost.
       if (!aptosAddr) {
         const aptos = (window as any)?.aptos
         const acc = await aptos?.account?.().catch(() => null)
@@ -130,10 +124,9 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
     },
   }), [aptosAddr])
 
-  /* ---------------------------------------------------------
-   * 4) Build widget once token + wallet are both ready.
-   *    Listen for kycFinished and POST to /zk-me/verify.
-   * --------------------------------------------------------- */
+  /* --------------------------------------------------------------------------
+   * 4) Build once ready; handle kycFinished → call backend → emit refresh.
+   * ------------------------------------------------------------------------ */
   useEffect(() => {
     if (!tokenReady || !petraReady) return
     if (!APP_ID?.trim())  { setError('Missing VITE_ZK_ME_APP_ID (mchNo)'); return }
@@ -141,8 +134,8 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
 
     if (!widgetRef.current) {
       widgetRef.current = new ZkMeWidget(
-        APP_ID,            // mchNo (merchant/app id)
-        'Lendoor',         // dApp name (shown in widget)
+        APP_ID,
+        'Lendoor',
         CHAIN_ID,
         provider,
         { lv: 'zkKYC', programNo: PROGRAM_NO }
@@ -154,12 +147,13 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
     const widget = widgetRef.current!
     const onFinish = async (payload: any) => {
       try {
-        const isGrant = !!payload?.isGrant;
+        const isGrant = !!payload?.isGrant
 
-        // ALWAYS use the Petra Aptos address as the source of truth
-        const walletToUse = (aptosAddr ?? '').toLowerCase();
-        if (!walletToUse) throw new Error('No Aptos wallet address from Petra');
+        // Always trust the Petra Aptos address as the canonical wallet.
+        const walletToUse = (aptosAddr ?? '').toLowerCase()
+        if (!walletToUse) throw new Error('No Aptos wallet address from Petra')
 
+        // Backend: persist + set on-chain score/limit (waitForTransaction).
         const r = await fetch(VERIFY_URL, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -170,20 +164,27 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
             widgetPayload: payload ?? null,
             zkAssociatedAccount: payload?.associatedAccount ?? null,
           }),
-        });
-        if (!r.ok) throw new Error(`verify ${r.status}: ${await r.text()}`);
+        })
+        if (!r.ok) throw new Error(`verify ${r.status}: ${await r.text()}`)
 
-        setVerified(isGrant);
-        if (isGrant) setIsVerified(true);
+        // UX flags
+        setVerified(isGrant)
+        if (isGrant) {
+          setIsVerified(true)
+          // Optional tiny settle; backend already waited for tx, so this is usually not needed.
+          // await new Promise(r => setTimeout(r, 300))
+          // Tell the rest of the app (hooks/components) to re-read on-chain data now.
+          triggerCreditRefresh('zkme-finished', { owner: walletToUse })
+        }
 
-        setTimeout(() => onBack(), 900);
+        // Close modal slightly after success
+        setTimeout(() => onBack(), 900)
       } catch (e: any) {
-        setError(e?.message ?? 'Failed to finalize verification');
+        setError(e?.message ?? 'Failed to finalize verification')
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
-
+    }
 
     ;(widget as any).on?.('kycFinished', onFinish)
     return () => {
@@ -192,9 +193,9 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
     }
   }, [tokenReady, petraReady, APP_ID, PROGRAM_NO, provider, setIsVerified, onBack, aptosAddr])
 
-  /* ---------------------------------------------------------
-   * 5) Launch exactly once when widget exists and prerequisites are met.
-   * --------------------------------------------------------- */
+  /* --------------------------------------------------------------------------
+   * 5) Launch widget once.
+   * ------------------------------------------------------------------------ */
   useEffect(() => {
     if (!tokenReady || !petraReady || !widgetRef.current || hasLaunchedRef.current) return
     hasLaunchedRef.current = true
@@ -213,7 +214,6 @@ export default function QRCodeView({ onBack }: QRCodeViewProps) {
     finally { setLoading(false) }
   }
 
-  // UI gating: you must connect Petra before opening the zkMe widget (program requires account)
   const needsConnect = !petraReady
 
   return (

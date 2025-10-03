@@ -1,146 +1,169 @@
-'use client'
+'use client';
 
-import * as React from 'react'
+import * as React from 'react';
 
-import { useCreditLine } from '@/hooks/borrow/useCreditLine'
-import { useBorrow } from '@/hooks/borrow/useBorrow'
-import { useSeniorExchangeRate } from '@/hooks/senior/useSeniorExchangeRate'
-import { useJuniorExchangeRate } from '@/hooks/junior/useJuniorExchangeRate'
-import { useSeniorYield } from '@/hooks/senior/useSeniorYield'
-import { useJuniorYield } from '@/hooks/junior/useJuniorYield'
-import { useSusdcBalance } from '@/hooks/senior/useSusdcBalance'
-import { useJusdcBalance } from '@/hooks/junior/useJusdcBalance'
-import { useSeniorAvailableToWithdraw } from '@/hooks/senior/useSeniorAvailableToWithdraw'
-import { useJuniorAvailableToWithdraw } from '@/hooks/junior/useJuniorAvailableToWithdraw'
-import { BACKEND_URL } from '@/lib/constants'
-import { useWallet } from '@aptos-labs/wallet-adapter-react'
+import { useCreditLine } from '@/hooks/borrow/useCreditLine';
+import { useSeniorExchangeRate } from '@/hooks/senior/useSeniorExchangeRate';
+import { useJuniorExchangeRate } from '@/hooks/junior/useJuniorExchangeRate';
+import { useSusdcBalance } from '@/hooks/senior/useSusdcBalance';
+import { useJusdcBalance } from '@/hooks/junior/useJusdcBalance';
+import { useSeniorAvailableToWithdraw } from '@/hooks/senior/useSeniorAvailableToWithdraw';
+import { BACKEND_URL } from '@/lib/constants';
+import { useWallet } from '@aptos-labs/wallet-adapter-react';
+
+/* =======================================================================================
+ * Stable in-memory cache for "isVerified"
+ *  - Survives unmount/remount of this provider (module-level singleton)
+ *  - Avoids redundant network fetches and flicker after route changes
+ * ======================================================================================= */
+type VerifiedCache = { value: boolean; expiresAt: number };
+const verifiedCache = new Map<string, VerifiedCache>();
+
+const normalizeWallet = (addr: unknown) => {
+  if (!addr) return '';
+  try {
+    const s = typeof addr === 'string' ? addr : (addr as any)?.toString?.() ?? String(addr);
+    return s.trim().toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
+function getVerifiedCached(wallet: string): boolean | null {
+  const hit = verifiedCache.get(wallet);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) return null;
+  return hit.value;
+}
+
+function setVerifiedCached(wallet: string, value: boolean, ttlMs: number) {
+  verifiedCache.set(wallet, { value, expiresAt: Date.now() + ttlMs });
+}
 
 type UserContextValue = {
-  creditScoreDisplay: string
-  creditLimitDisplay: string
-  borrowedDisplay: string
+  creditScoreDisplay: string;
+  creditLimitDisplay: string;
+  borrowedDisplay: string;
 
-  seniorExchangeRateDisplay: string
-  juniorExchangeRateDisplay: string
+  seniorExchangeRateDisplay: string;
+  juniorExchangeRateDisplay: string;
 
-  seniorApyDisplay: string
-  juniorApyDisplay: string
+  susdcDisplay: string;
+  jusdcDisplay: string;
 
-  susdcDisplay: string
-  jusdcDisplay: string
+  seniorWithdrawAvailableDisplay: string;
+  juniorWithdrawAvailableDisplay: string;
 
-  seniorWithdrawAvailableDisplay: string
-  juniorWithdrawAvailableDisplay: string
+  maxBorrowDisplay: string;
+  borrowSubmit: (amountInput: string) => Promise<boolean>;
+  borrowSubmitting: boolean;
 
-  maxBorrowDisplay: string
-  borrowSubmit: (amountInput: string) => Promise<boolean>
-  borrowSubmitting: boolean
+  isVerified: boolean;
+  setIsVerified: (on: boolean) => void;
+};
 
-  isVerified: boolean
-  setIsVerified: (on: boolean) => void
-}
+const UserContext = React.createContext<UserContextValue | null>(null);
 
-const UserContext = React.createContext<UserContextValue | null>(null)
-
-type UserProviderProps = { children: React.ReactNode }
-
-// Normalize any AccountAddress|string into a lowercased hex string
-const normalizeWallet = (addr: unknown) => {
-  if (!addr) return ''
-  try {
-    const s = typeof addr === 'string' ? addr : (addr as any)?.toString?.() ?? String(addr)
-    return s.trim().toLowerCase()
-  } catch {
-    return ''
-  }
-}
+type UserProviderProps = { children: React.ReactNode };
 
 export function UserProvider({ children }: UserProviderProps) {
-  // Credit line
+  // On-chain: credit line
   const {
     scoreDisplay: creditScoreDisplay,
     limitDisplay: creditLimitDisplay,
     borrowedDisplay,
-  } = useCreditLine()
+  } = useCreditLine();
 
   // Balances
-  const { display: susdcDisplay } = useSusdcBalance()
-  const { display: jusdcDisplay } = useJusdcBalance()
+  const { display: susdcDisplay } = useSusdcBalance();
+  const { display: jusdcDisplay } = useJusdcBalance();
 
   // Exchange rates
-  const { display: seniorExchangeRateDisplay } = useSeniorExchangeRate()
-  const { display: juniorExchangeRateDisplay } = useJuniorExchangeRate()
+  const { display: seniorExchangeRateDisplay } = useSeniorExchangeRate();
+  const { display: juniorExchangeRateDisplay } = useJuniorExchangeRate();
 
   // Withdrawable
-  const { display: seniorWithdrawAvailableDisplay } = useSeniorAvailableToWithdraw()
-  //const { display: juniorWithdrawAvailableDisplay } = useJuniorAvailableToWithdraw()
-  const juniorWithdrawAvailableDisplay = '—'
+  const { display: seniorWithdrawAvailableDisplay } = useSeniorAvailableToWithdraw();
+  const juniorWithdrawAvailableDisplay = '—';
 
-  // APY
-  const seniorApyDisplay = '10%'
-  const juniorApyDisplay = '20%'
+  // APY (mock for now)
+  const seniorApyDisplay = '10%';
+  const juniorApyDisplay = '20%';
 
-
-  const maxBorrowDisplay = '7,550 USDC'
-  const borrowSubmitting = false
+  // Borrow (mock)
+  const maxBorrowDisplay = '7,550 USDC';
+  const borrowSubmitting = false;
   const borrowSubmit = async (amountInput: string): Promise<boolean> => {
-    // Simulate success; replace with real call later.
-    console.log('[MOCK] borrowSubmit ->', amountInput)
-    await new Promise((r) => setTimeout(r, 400))
-    return true
-  }
+    console.log('[MOCK] borrowSubmit ->', amountInput);
+    await new Promise((r) => setTimeout(r, 400));
+    return true;
+  };
 
+  // Wallet
+  const { account, connected } = useWallet();
+  const wallet = React.useMemo(() => normalizeWallet(account?.address), [account?.address]);
 
+  // Backend verification flag with cache
+  const [isVerified, setIsVerifiedState] = React.useState<boolean>(() => {
+    if (!wallet) return false;
+    const cached = getVerifiedCached(wallet);
+    return cached ?? false;
+  });
 
-  /*
+  const setIsVerified = React.useCallback(
+    (on: boolean) => {
+      setIsVerifiedState(on);
+      if (wallet) setVerifiedCached(wallet, on, on ? 5 * 60_000 : 60_000);
+    },
+    [wallet]
+  );
 
-
-  // APY
-  const { displayAPY: seniorApyDisplay } = useSeniorYield()
-  const { displayAPY: juniorApyDisplay } = useJuniorYield()
-
-  // Withdrawable
-  const { display: juniorWithdrawAvailableDisplay } = useJuniorAvailableToWithdraw()
-
-  // Borrow
-  const {
-    maxBorrowDisplay,
-    submit: borrowSubmit,
-    submitting: borrowSubmitting,
-  } = useBorrow({ requireController: true })
-*/
-  // Wallet (Aptos)
-  const { account, connected } = useWallet()
-  const wallet = React.useMemo(() => normalizeWallet(account?.address), [account?.address])
-
-  // Backend verification flag
-  const [isVerified, setIsVerified] = React.useState(false)
+  const fetchCtrlRef = React.useRef<AbortController | null>(null);
+  const lastFetchIdRef = React.useRef(0);
 
   React.useEffect(() => {
-    let alive = true
-    const run = async () => {
+    if (!connected || !wallet) {
+      fetchCtrlRef.current?.abort();
+      fetchCtrlRef.current = null;
+      setIsVerifiedState(false);
+      return;
+    }
+
+    // Immediate cache hydrate
+    const cached = getVerifiedCached(wallet);
+    if (cached !== null) {
+      setIsVerifiedState(cached);
+      // Optional: you could still refresh in background here if you want.
+      return;
+    }
+
+    // Cache miss → fetch
+    const ctrl = new AbortController();
+    fetchCtrlRef.current?.abort();
+    fetchCtrlRef.current = ctrl;
+    const fetchId = ++lastFetchIdRef.current;
+
+    (async () => {
       try {
-        // Treat "not connected" as unverified
-        if (!connected || !wallet) {
-          if (alive) setIsVerified(false)
-          return
-        }
-        const res = await fetch(`${BACKEND_URL}/user/${wallet}`)
+        const res = await fetch(`${BACKEND_URL}/user/${wallet}`, { signal: ctrl.signal });
         if (!res.ok) {
-          if (alive) setIsVerified(false)
-          return
+          // Don't overwrite UI; set short negative cache to avoid hammering
+          setVerifiedCached(wallet, false, 30_000);
+          return;
         }
-        const data: { isVerified?: boolean } = await res.json()
-        if (alive) setIsVerified(Boolean(data?.isVerified))
-      } catch {
-        if (alive) setIsVerified(false)
+        const data: { isVerified?: boolean } = await res.json();
+        const val = Boolean(data?.isVerified);
+        if (fetchId !== lastFetchIdRef.current) return;
+        setIsVerifiedState(val);
+        setVerifiedCached(wallet, val, val ? 5 * 60_000 : 60_000);
+      } catch (e: any) {
+        // Network/abort — keep last good value, short negative cache
+        setVerifiedCached(wallet, false, 20_000);
       }
-    }
-    void run()
-    return () => {
-      alive = false
-    }
-  }, [connected, wallet])
+    })();
+
+    return () => ctrl.abort();
+  }, [connected, wallet]);
 
   const value = React.useMemo<UserContextValue>(
     () => ({
@@ -150,9 +173,6 @@ export function UserProvider({ children }: UserProviderProps) {
 
       seniorExchangeRateDisplay,
       juniorExchangeRateDisplay,
-
-      seniorApyDisplay,
-      juniorApyDisplay,
 
       susdcDisplay,
       jusdcDisplay,
@@ -173,8 +193,6 @@ export function UserProvider({ children }: UserProviderProps) {
       borrowedDisplay,
       seniorExchangeRateDisplay,
       juniorExchangeRateDisplay,
-      seniorApyDisplay,
-      juniorApyDisplay,
       susdcDisplay,
       jusdcDisplay,
       seniorWithdrawAvailableDisplay,
@@ -183,14 +201,15 @@ export function UserProvider({ children }: UserProviderProps) {
       borrowSubmit,
       borrowSubmitting,
       isVerified,
+      setIsVerified,
     ]
-  )
+  );
 
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }
 
 export function useUser() {
-  const ctx = React.useContext(UserContext)
-  if (!ctx) throw new Error('useUser must be used within <UserProvider>.')
-  return ctx
+  const ctx = React.useContext(UserContext);
+  if (!ctx) throw new Error('useUser must be used within <UserProvider>.');
+  return ctx;
 }

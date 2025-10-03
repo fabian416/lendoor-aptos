@@ -429,22 +429,31 @@ module lendoor::controller {
         repay_coin: Coin<Coin0>,
         deposit_coin: Coin<Coin0>,
     ) {
+        // Repay atentively: it might return a remainder if there wasn't enough debt
         let repay_remaining_coin = reserve::repay<Coin0>(repay_coin);
-        coin::destroy_zero<Coin0>(repay_remaining_coin);
+        let deposit_coin_local = deposit_coin;
 
+        // If there's any repay remaining, we treat it as an additional deposit
+        if (coin::value(&repay_remaining_coin) > 0) {
+            coin::merge<Coin0>(&mut deposit_coin_local, repay_remaining_coin);
+        } else {
+            coin::destroy_zero<Coin0>(repay_remaining_coin);
+        };
+
+        // Sync tranches (junior/senior) and apply effects
         let (p, l, j, b) = tranche_manager::sync_and_get<Coin0>();
         apply_tranche_effects<Coin0>(p, l, j, b);
 
-        if (coin::value(&deposit_coin) > 0) {
-            let lp_coin = reserve::mint<Coin0>(deposit_coin);
+        // If there's anything left to deposit, mint LP and add as collateral
+        if (coin::value(&deposit_coin_local) > 0) {
+            let lp_coin = reserve::mint<Coin0>(deposit_coin_local);
             reserve::add_collateral<Coin0>(lp_coin);
         } else {
-            coin::destroy_zero(deposit_coin);
+            coin::destroy_zero<Coin0>(deposit_coin_local);
         }
     }
 
-
-    /// Withdraw fund into the Aries protocol, there are two scenarios:
+    /// Withdraw funds there are two scenarios:
     ///
     /// 1. User have an existing `Coin0` deposit: the existing deposit will be withdrawn first, if
     /// it is not enough and user `allow_borrow`, a loan will be taken out.

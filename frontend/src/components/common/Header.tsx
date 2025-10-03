@@ -5,6 +5,8 @@ import { WalletSelector } from "@/components/common/WalletSelector";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useUserJourney } from '@/providers/UserJourneyProvider';
 import UserJourneyBadge from '@/components/common/UserJourneyBadge';
+import { useWallet } from '@aptos-labs/wallet-adapter-react';
+import MintUSDCButton from '@/components/common/MintUSDCButton';
 
 function labelClasses(isActive: boolean) {
   const base =
@@ -23,6 +25,7 @@ export function Header() {
 
   const { pathname, key: routeKey } = useLocation();
   const { ready, is_borrow, is_lend } = useUserJourney();
+  const { account } = useWallet();
 
   const showBorrowBadge = ready && is_borrow && pathname !== '/borrow';
   const showLendBadge   = ready && is_lend   && pathname !== '/lend';
@@ -59,11 +62,14 @@ export function Header() {
           </NavLink>
         </nav>
 
-        <div className="min-w-[200px] w-[200px] shrink-0 flex justify-end">
+        <div className="flex items-center gap-3">
+          {mounted && account?.address ? (
+            <MintUSDCButton />
+          ) : null}
           {mounted ? (
             <WalletSelector />
           ) : (
-            <div className="h-10 w-full rounded-md border border-primary/20 bg-muted/40 animate-pulse" />
+            <div className="h-10 w-[200px] rounded-md border border-primary/20 bg-muted/40 animate-pulse" />
           )}
         </div>
       </div>

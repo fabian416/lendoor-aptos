@@ -71,5 +71,7 @@ export const MODULES = {
 } as const;
 
 
+export const DEFAULT_NODE = 'https://api.testnet.aptoslabs.com';
+
 export const VITE_ZK_ME_APP_ID = ENV.VITE_ZK_ME_APP_ID as string
 export const VITE_ZK_ME_PROGRAM_NO = ENV.VITE_ZK_ME_PROGRAM_NO as string

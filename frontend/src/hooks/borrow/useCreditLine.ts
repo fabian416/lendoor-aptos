@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useAptos } from '@/providers/WalletProvider';
 import { useWallet } from '@aptos-labs/wallet-adapter-react';
-import { LENDOOR_CONTRACT, WUSDC_TYPE, WUSDC_DECIMALS } from '@/lib/constants';
+import { LENDOOR_CONTRACT, WUSDC_TYPE, WUSDC_DECIMALS, DEFAULT_NODE } from '@/lib/constants';
 import { onCreditRefresh } from '@/lib/creditBus';
 
 /* ========================================================================================
@@ -56,7 +56,6 @@ type ViewErr = { ok: false; status: number; text: string };
 type ViewResp = ViewOk | ViewErr;
 const isViewErr = (r: ViewResp): r is ViewErr => r.ok === false;
 
-const DEFAULT_NODE = 'https://api.testnet.aptoslabs.com';
 
 function resolveNodeUrl(aptos: any): string {
   let u =

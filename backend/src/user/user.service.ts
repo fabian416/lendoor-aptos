@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
+import { mintFA, transferFA, getFaDecimals } from '@/contracts/mint-fa';
 
 @Injectable()
 export class UserService {
@@ -39,5 +40,37 @@ export class UserService {
     const user = await this.repo.findOne({ where: { walletAddress: wallet } });
     if (!user) throw new NotFoundException('User not found');
     return { walletAddress: user.walletAddress };
+  }
+
+  // Mint to admin, then transfer FA to the target wallet
+  async mintFaToWallet(walletAddress: string, amountHuman: string, decimals?: number) {
+    try {
+      const to = this.normalizeWallet(walletAddress);
+      if (!to?.startsWith('0x')) throw new BadRequestException('Invalid wallet address');
+
+      const dec = typeof decimals === 'number' ? decimals : await getFaDecimals();
+
+      const { hash: mintHash, amountSmallest, faObject } = await mintFA({
+        amountHuman,
+        decimals: dec,
+      });
+
+      const { hash: transferHash } = await transferFA({
+        to,
+        amountSmallest,
+        faObject,
+      });
+
+      return {
+        to,
+        amountHuman,
+        amountSmallest: amountSmallest.toString(),
+        decimals: dec,
+        mintHash,
+        transferHash,
+      };
+    } catch (e: any) {
+      throw new BadRequestException(e?.message || 'mint/transfer failed');
+    }
   }
 }

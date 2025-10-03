@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { SubmitZkMeDto } from './dto/submit-zk-me.dto';
-import { giveCreditScoreAndLimit } from 'src/config/contractConfig';
+import { giveCreditScoreAndLimit } from '@/contracts/credit-score';
 
 // Defaults for your business logic
 const DEFAULT_SCORE = 120;

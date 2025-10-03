@@ -15,14 +15,14 @@ function runOk(cmd, ignoreSubstrings = []) {
   catch (e) {
     const msg = String(e?.stderr || e?.stdout || e?.message || e);
     if (ignoreSubstrings.some(s => msg.includes(s))) {
-      console.log("ℹ️  Ignorando error esperado/idempotente:", ignoreSubstrings.find(s=>msg.includes(s)));
+      console.log("ℹ️  Ignoring expected/idempotent error:", ignoreSubstrings.find(s=>msg.includes(s)));
       return false;
     }
     throw e;
   }
 }
 function toU64(amountStr, decimals){
-  if (!/^\d+(\.\d+)?$/.test(amountStr)) throw new Error(`Monto inválido: ${amountStr}`);
+  if (!/^\d+(\.\d+)?$/.test(amountStr)) throw new Error(`Invalid amount: ${amountStr}`);
   const [i, f=""] = amountStr.split(".");
   const frac = (f + "0".repeat(decimals)).slice(0, decimals);
   const big = BigInt(i + frac);
@@ -38,55 +38,55 @@ function hexFromUtf8(s){ return "0x" + Buffer.from(s, "utf8").toString("hex"); }
   const adminKey     = need("VITE_MODULE_PUBLISHER_ACCOUNT_PRIVATE_KEY");
   const faObj        = need("VITE_FA_METADATA_OBJECT");
 
-  // Prestatario: por defecto el publisher (podés override con WALLET_*)
+  // Borrower: defaults to the publisher (you can override with WALLET_*)
   const borrowerAddr = (process.env.WALLET_ADDRESS || adminAddr).replace(/^"|"$/g,"");
   const borrowerKey  = (process.env.WALLET_PRIVATE_KEY || adminKey).replace(/^"|"$/g,"");
 
-  // Decimales del subyacente (WUSDC); override con VITE_WUSDC_DECIMALS si hace falta
+  // Decimals of the underlying asset (WUSDC); override with VITE_WUSDC_DECIMALS if needed
   const DECIMALS = parseInt(process.env.VITE_WUSDC_DECIMALS || "6", 10);
 
-  // Tipo del activo que usa la reserve
+  // Type of the asset used by the reserve
   const TYPE_WUSDC = `${pkgAddr}::wusdc::WUSDC`;
 
   // ===== CLI =====
-  // node scripts/move/set_line_and_borrow_fa.js  amount  [score]  [limitHuman]  [profile]
-  // ej: node scripts/move/set_line_and_borrow_fa.js 1.25 180 2.50 main
+  // node scripts/move/borrow.js  amount  [score]  [limitHuman]  [profile]
+  // ex: node scripts/move/borrow.js 1.25 180 2.50 main
   const [,, amountHuman="1", scoreStr="180", limitHuman="", profileName="main"] = process.argv;
   const amountU64 = toU64(String(amountHuman), DECIMALS);
   const scoreU8   = Math.max(0, Math.min(255, parseInt(scoreStr, 10) || 0));
-  const limitHumanEff = limitHuman ? String(limitHuman) : String(Number(amountHuman) * 2); // margen 2×
+  const limitHumanEff = limitHuman ? String(limitHuman) : String(Number(amountHuman) * 2); // 2x margin
   const limitU64 = toU64(limitHumanEff, DECIMALS);
   const profileHex = hexFromUtf8(profileName); // "main" -> 0x6d61696e
 
   console.log(`Borrower: ${borrowerAddr}`);
   console.log(`Borrow FA: ${amountHuman} (u64=${amountU64})  score=${scoreU8}  limit=${limitHumanEff}  profile="${profileName}"`);
 
-  // ===== 0) Sanity: wrapper FA listo para WUSDC
+  // ===== 0) Sanity: FA wrapper ready for WUSDC
   const ready = viewJSON(
     `aptos move view --function-id ${pkgAddr}::fa_to_coin_wrapper::is_ready --type-args ${TYPE_WUSDC} --url ${url}`
   );
   if (!ready?.Result?.[0]) {
-    console.error("✗ Wrapper FA no está listo para WUSDC. Corre init_wrapper_* + init_wrapper_coin_addr primero.");
+    console.error("✗ FA wrapper is not ready for WUSDC. Run init_wrapper_* + init_wrapper_coin_addr first.");
     process.exit(1);
   }
 
-  // ===== 1) Idempotente: init credit_manager + init_scores
+  // ===== 1) Idempotent: init credit_manager + init_scores
   runOk(
     `aptos move run --function-id ${pkgAddr}::credit_manager::init ` +
     `--assume-yes --url ${url} --private-key ${adminKey}`,
     [
-      "Failed to move resource into", // ya existe GlobalCredit
+      "Failed to move resource into", // GlobalCredit already exists
     ]
   );
   runOk(
     `aptos move run --function-id ${pkgAddr}::credit_manager::init_scores ` +
     `--assume-yes --url ${url} --private-key ${adminKey}`,
     [
-      "Failed to move resource into", // ya existe ScoreBook
+      "Failed to move resource into", // ScoreBook already exists
     ]
   );
 
-  // ===== 2) Setea (o actualiza) score + límite del borrower
+  // ===== 2) Set (or update) borrower's score + limit
   run(
     `aptos move run --function-id ${pkgAddr}::credit_manager::admin_set_line ` +
     `--type-args ${TYPE_WUSDC} ` +
@@ -94,40 +94,40 @@ function hexFromUtf8(s){ return "0x" + Buffer.from(s, "utf8").toString("hex"); }
     `--assume-yes --url ${url} --private-key ${adminKey}`
   );
 
-  // ===== 3) Chequea liquidez en la reserve
+  // ===== 3) Check liquidity in the reserve
   const state = viewJSON(
     `aptos move view --function-id ${pkgAddr}::reserve::reserve_state ` +
     `--type-args ${TYPE_WUSDC} --url ${url}`
   );
   const cash = BigInt(state?.Result?.[0]?.total_cash_available ?? "0");
   if (cash < BigInt(amountU64)) {
-    console.error(`✗ Liquidez insuficiente en la reserve. total_cash_available=${cash} < amount=${amountU64}`);
+    console.error(`✗ Insufficient liquidity in the reserve. total_cash_available=${cash} < amount=${amountU64}`);
     process.exit(1);
   }
 
-  // ===== 4) PRE: balance FA del borrower
-  console.log("\n=== PRE-ESTADO ===");
+  // ===== 4) PRE: borrower's FA balance
+  console.log("\n=== PRE-STATE ===");
   const faBalBefore = viewJSON(
     `aptos move view --json --function-id 0x1::fungible_asset::balance ` +
     `--args address:${borrowerAddr} object:${faObj} --url ${url}`
   );
-  console.log("FA balance (antes):", faBalBefore?.Result?.[0] ?? faBalBefore);
+  console.log("FA balance (before):", faBalBefore?.Result?.[0] ?? faBalBefore);
 
   // ===== 5) BORROW FA
   run(
     `aptos move run --function-id ${pkgAddr}::controller::borrow_fa ` +
     `--type-args ${TYPE_WUSDC} ` +
-    `--args ${profileHex} u64:${amountU64} ` +
+    `--args hex:${profileHex} u64:${amountU64} ` +
     `--assume-yes --url ${url} --private-key ${borrowerKey}`
   );
 
-  // ===== 6) POST: balance FA + estado
-  console.log("\n=== POST-ESTADO ===");
+  // ===== 6) POST: FA balance + state
+  console.log("\n=== POST-STATE ===");
   const faBalAfter = viewJSON(
     `aptos move view --json --function-id 0x1::fungible_asset::balance ` +
     `--args address:${borrowerAddr} object:${faObj} --url ${url}`
   );
-  console.log("FA balance (después):", faBalAfter?.Result?.[0] ?? faBalAfter);
+  console.log("FA balance (after):", faBalAfter?.Result?.[0] ?? faBalAfter);
 
   const state2 = viewJSON(
     `aptos move view --function-id ${pkgAddr}::reserve::reserve_state ` +

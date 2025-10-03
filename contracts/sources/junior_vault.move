@@ -70,8 +70,6 @@ module lendoor::junior {
         utils::deposit_coin<S<Coin0>>(user, s_coins);
     }
 
-
-
     public entry fun withdraw<Coin0>(user: &signer, shares: u64) acquires JVault {
         let owner = controller_config::admin_addr();
         let v = borrow_global_mut<JVault<Coin0>>(owner);
@@ -96,7 +94,6 @@ module lendoor::junior {
         let lp = coin::extract<LP<Coin0>>(&mut v.lp_box, lp_out);
         utils::deposit_coin<LP<Coin0>>(user, lp);
     }
-
 
     public(friend) fun absorb_loss<Coin0>(admin_addr: address, loss_assets: u64) acquires JVault {
         let v = borrow_global_mut<JVault<Coin0>>(admin_addr);

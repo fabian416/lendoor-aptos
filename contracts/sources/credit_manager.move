@@ -172,19 +172,19 @@ module lendoor::credit_manager {
     }
 
     // =======================
-    //  Credit Score & Lines (paralelo al libro principal)
+    //  Credit Score & Lines (parallel to the main book)
     //  - score: u8 (0..255)
-    //  - limit por AssetType reutiliza admin_set_limit existente
+    //  - limit by AssetType reuses the existing admin_set_limit
     // =======================
 
     const DEFAULT_SCORE: u8 = 0;
 
-    /// Recurso global @lendoor: score por usuario (separado para no romper layout).
+    /// Global resource @lendoor: score by user (separate to avoid breaking layout).
     struct ScoreBook has key {
         scores: SimpleMap<address, u8>,
     }
 
-    /// Inicialización idempotente del libro de scores
+    /// Idempotent initialization of the score book
     public entry fun init_scores(admin: &signer) {
         controller_config::assert_is_admin(signer::address_of(admin));
         if (!exists<ScoreBook>(@lendoor)) {
@@ -194,7 +194,7 @@ module lendoor::credit_manager {
         }
     }
 
-    /// Admin: setea el score de un usuario en [0..255]
+    /// Admin: sets a user's score in [0..255]
     public entry fun admin_set_score(
         admin: &signer,
         user: address,
@@ -226,7 +226,7 @@ module lendoor::credit_manager {
         }
     }
 
-    /// Admin: set score + per-asset limit (similar a setLine() de Solidity)
+    /// Admin: set score + per-asset limit (similar to setLine() in Solidity)
     public entry fun admin_set_line<AssetType>(
         admin: &signer,
         user: address,
@@ -235,11 +235,11 @@ module lendoor::credit_manager {
     ) acquires GlobalCredit, ScoreBook {
         // Set score
         admin_set_score(admin, user, score);
-        // Set per-asset limit (reutiliza la función existente)
+        // Set per-asset limit (reuses the existing function)
         admin_set_limit<AssetType>(admin, user, limit);
     }
 
-    /// Admin: batch para múltiples usuarios (paralelo a batchSetLines)
+    /// Admin: batch for multiple users (parallel to batchSetLines)
     public entry fun admin_batch_set_lines<AssetType>(
         admin: &signer,
         users: vector<address>,

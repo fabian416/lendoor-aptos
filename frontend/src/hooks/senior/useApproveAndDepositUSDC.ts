@@ -13,22 +13,20 @@ import {
 import { parseUnitsAptos, formatUSDCAmount2dp } from '@/lib/utils';
 import { useUserJourney } from '@/providers/UserJourneyProvider';
 
-/** Human-friendly message extraction */
+/* ============================ helpers ============================ */
+
 const msg = (e: any) =>
   e?.shortMessage || e?.reason || e?.message || e?.vm_status || 'Transaction failed';
 
-/** Encode string to vector<u8> as plain number[] (wallets serialize this reliably) */
 const bytes = (s: string) => Array.from(new TextEncoder().encode(s));
 
-/** Accept string or object implementing toString() for addresses */
 type Addressish = string | { toString: () => string };
 const asStr = (a: Addressish | null | undefined) =>
   typeof a === 'string' ? a : a?.toString?.() ?? '';
 
-/** Case-insensitive hex normalize */
 const norm = (a?: string | null) => (a ?? '').toLowerCase();
 
-/** Indexer FA balance by metadata object */
+/** Indexer FA balance por metadata object */
 async function faBalanceIndexer(aptos: any, owner: Addressish, meta: string): Promise<bigint | null> {
   try {
     const list = await aptos.getAccountFungibleAssetBalances({ accountAddress: asStr(owner) });
@@ -40,11 +38,11 @@ async function faBalanceIndexer(aptos: any, owner: Addressish, meta: string): Pr
         return [m1, m2, m3].some((x) => norm(x) === norm(meta));
       }) ?? null;
     if (hit?.amount != null) return BigInt(hit.amount);
-  } catch { /* ignore indexer failures */ }
+  } catch {/* ignore */}
   return null;
 }
 
-/** On-chain FA balance via view: 0x1::primary_fungible_store::balance(owner, metadata_obj) -> u128 */
+/** On-chain FA balance fallback: 0x1::primary_fungible_store::balance(owner, metadata_obj) -> u128 */
 async function faBalanceOnChain(aptos: any, owner: Addressish, meta: string): Promise<bigint | null> {
   try {
     const res = (await aptos.view({
@@ -56,27 +54,10 @@ async function faBalanceOnChain(aptos: any, owner: Addressish, meta: string): Pr
     })) as unknown as [string] | undefined;
     const raw = res?.[0];
     if (raw != null) return BigInt(raw);
-  } catch { /* tolerate nodes without this view */ }
+  } catch {/* ignore */}
   return null;
 }
 
-/** On-chain APT balance for gas: 0x1::coin::balance<APT>(addr) -> u64 */
-async function aptBalance(aptos: any, owner: Addressish): Promise<bigint | null> {
-  try {
-    const res = (await aptos.view({
-      payload: {
-        function: '0x1::coin::balance',
-        typeArguments: ['0x1::aptos_coin::AptosCoin'],
-        functionArguments: [asStr(owner)],
-      },
-    })) as unknown as [string] | undefined;
-    const raw = res?.[0];
-    if (raw != null) return BigInt(raw);
-  } catch { /* ignore */ }
-  return null;
-}
-
-/** Map known Move aborts to clearer messages */
 function normalizeMoveError(e: any): string {
   const m = msg(e);
   if (m.includes('ECONTROLLER_DEPOSIT_ZERO_AMOUNT')) return 'Amount must be greater than zero.';
@@ -92,15 +73,14 @@ function normalizeMoveError(e: any): string {
   return m;
 }
 
-type SubmitOptions = {
-  /** If true, proceed when neither indexer nor on-chain balance can be read */
-  allowUnknownBalance?: boolean;
-};
+type SubmitOptions = { allowUnknownBalance?: boolean };
+
+/* ============================== hook ============================== */
 
 export function useApproveAndDepositUSDC() {
   const { aptos } = useAptos();
   const { account, signAndSubmitTransaction } = useWallet();
-  const addr = (account?.address as any) as Addressish | undefined; // Wallet adapters vary; coerce to string
+  const addr = (account?.address as any) as Addressish | undefined;
   const { value, updateJourney } = useUserJourney();
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -116,23 +96,14 @@ export function useApproveAndDepositUSDC() {
 
       setSubmitting(true);
       try {
-        // Parse human input into base units
+        // 1) parse a base units usando DECIMALS de constants/env
         const assets = parseUnitsAptos(amountInput.trim(), DECIMALS);
         if (assets <= 0n) {
           toast.error('Invalid amount', { description: 'Enter a positive value.' });
           return;
         }
 
-        // Gas sanity: many wallets refuse to simulate if APT = 0
-        try {
-          const apt = await aptBalance(aptos, addr);
-          if (apt !== null && apt === 0n) {
-            toast.error('No gas', { description: 'Your account has 0 APT on testnet.' });
-            return;
-          }
-        } catch { /* ignore */ }
-
-        // Readiness checks on-chain
+        // 2) checks mínimos on-chain (wrapper + reserve)
         try {
           const [ready] = (await aptos.view({
             payload: {
@@ -142,9 +113,7 @@ export function useApproveAndDepositUSDC() {
             },
           })) as unknown as [boolean];
           if (!ready) {
-            toast.error('Wrapper not ready', {
-              description: 'FA wrapper is not initialized for this asset.',
-            });
+            toast.error('Wrapper not ready', { description: 'FA wrapper is not initialized for this asset.' });
             return;
           }
           const [exists] = (await aptos.view({
@@ -155,19 +124,15 @@ export function useApproveAndDepositUSDC() {
             },
           })) as unknown as [boolean];
           if (!exists) {
-            toast.error('Reserve missing', {
-              description: 'Asset reserve has not been created on-chain.',
-            });
+            toast.error('Reserve missing', { description: 'Asset reserve has not been created on-chain.' });
             return;
           }
         } catch {
-          toast.error('Preflight failed', {
-            description: 'On-chain readiness checks did not pass.',
-          });
+          toast.error('Preflight failed', { description: 'On-chain readiness checks did not pass.' });
           return;
         }
 
-        // Balance checks (indexer -> on-chain fallback)
+        // 3) balance FA (indexer → on-chain)
         let bal = await faBalanceIndexer(aptos, addr, FA_METADATA_OBJECT);
         if (bal == null) {
           const onchain = await faBalanceOnChain(aptos, addr, FA_METADATA_OBJECT);
@@ -175,23 +140,20 @@ export function useApproveAndDepositUSDC() {
         }
         if (bal == null && !allowUnknownBalance) {
           toast.error('Cannot verify balance', {
-            description:
-              'Neither indexer nor on-chain balance could be read for this FA. Check FA_METADATA_OBJECT.',
+            description: 'Neither indexer nor on-chain balance could be read for this FA. Check FA_METADATA_OBJECT.',
           });
           return;
         }
         if (bal != null && bal < assets) {
           toast.error('Insufficient balance', {
-            description: `You have ${formatUSDCAmount2dp(bal)} and need ${formatUSDCAmount2dp(
-              assets,
-            )}.`,
+            description: `You have ${formatUSDCAmount2dp(bal)} and need ${formatUSDCAmount2dp(assets)}.`,
           });
           return;
         }
 
-        // Wallet payload: number[] for vector<u8>, string for u64
+        // 4) payload (solo FA)
         const payload = {
-          function: `${LENDOOR_CONTRACT}::controller::deposit_fa`,
+          function: `${LENDOOR_CONTRACT}::controller::deposit_fa` as `${string}::${string}::${string}`,
           typeArguments: [WUSDC_TYPE],
           functionArguments: [bytes(profileName), assets.toString()],
         };

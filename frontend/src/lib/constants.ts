@@ -39,6 +39,7 @@ export const LENDOOR_MODULE: string = ENV.VITE_LENDOOR_MODULE ?? "reserve";
 /** WUSDC coin type (MUST exist at that package on TESTNET) */
 export const WUSDC_MODULE = ENV.VITE_WUSDC_MODULE ?? "wusdc";
 export const WUSDC_STRUCT = ENV.VITE_WUSDC_STRUCT ?? "WUSDC";
+
 export const WUSDC_TYPE: FQName = coinType(LENDOOR_CONTRACT, WUSDC_MODULE, WUSDC_STRUCT);
 
 /** FA metadata object (address of the FA metadata; keep it testnet) */
@@ -68,3 +69,9 @@ export const MODULES = {
   trancheConfig: "tranche_config",
   junior: "junior",
 } as const;
+
+
+export const DEFAULT_NODE = 'https://api.testnet.aptoslabs.com';
+
+export const VITE_ZK_ME_APP_ID = ENV.VITE_ZK_ME_APP_ID as string
+export const VITE_ZK_ME_PROGRAM_NO = ENV.VITE_ZK_ME_PROGRAM_NO as string

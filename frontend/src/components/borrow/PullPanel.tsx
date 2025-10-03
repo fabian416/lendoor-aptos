@@ -38,7 +38,7 @@ export function PullPanel({
   const { isVerified } = useUser();
 
   // Borrow hook (handles controller enabling + borrow execution)
-  const { maxBorrowDisplay, submit, submitting } = useBorrow({requireController: true});
+  const { maxBorrowDisplay, submit, submitting } = useBorrow();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

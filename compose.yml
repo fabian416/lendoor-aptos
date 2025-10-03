@@ -1,0 +1,87 @@
+services:
+  backend:
+    image: ghcr.io/lucholeonel/lendoor/backend:production
+    container_name: backend
+    ports:
+      - "5000:5000"
+    restart: always
+    networks:
+      - zkaccess_network
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=5000
+
+  frontend:
+    image: ghcr.io/lucholeonel/lendoor/frontend:production
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    restart: always
+    networks:
+      - zkaccess_network
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+
+  backend_aptos:
+    image: ghcr.io/fabian416/lendoor-aptos/backend:production
+    container_name: backend_aptos
+    ports:
+      - "5001:5001"
+    restart: always
+    networks:
+      - zkaccess_network
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=5001
+
+  frontend_aptos:
+    image: ghcr.io/fabian416/lendoor-aptos/frontend:production
+    container_name: frontend_aptos
+    ports:
+      - "3001:3001"
+    restart: always
+    networks:
+      - zkaccess_network
+    depends_on:
+      - backend_aptos
+    env_file:
+      - .env
+    environment:
+      - PORT=3001
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: always
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    networks:
+      - zkaccess_network
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    environment:
+      - SITE_DOMAIN=lendoor.xyz
+      - API_DOMAIN=api.lendoor.xyz
+      - SITE_APTOS_DOMAIN=aptos.lendoor.xyz
+      - API_APTOS_DOMAIN=aptos.api.lendoor.xyz
+
+volumes:
+  caddy_data: {}
+
+networks:
+  zkaccess_network:
+    driver: bridge

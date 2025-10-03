@@ -19,7 +19,7 @@ type RepayPanelProps = {
   isLoggedIn: boolean
   loadingNetwork: boolean
   onConnect: () => void
-  onRepay?: (amount: string) => void // now optional; hook handles chain call
+  onRepay?: (amount: string) => void
   outstandingLabel?: string
 }
 

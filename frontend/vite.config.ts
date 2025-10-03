@@ -26,12 +26,12 @@ export default defineConfig({
   },
   preview: {
     host: '0.0.0.0',
-    port: 3000,
-    allowedHosts: ['lendoor.xyz'],
+    port: 3001,
+    allowedHosts: ['aptos.lendoor.xyz'],
   },
   server: {
     host: '0.0.0.0',
-    port: 3000,
-    allowedHosts: ['lendoor.xyz'],
+    port: 3001,
+    allowedHosts: ['aptos.lendoor.xyz'],
   }
 })

@@ -1,4 +1,3 @@
-// user-journey.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -17,7 +16,6 @@ export class UserService {
     return req.every(v => !!(v && String(v).trim().length > 0));
   }
 
-  /** Devuelve el step actual; si no existe, lo crea. isVerified: SOLO por datos */
   async getStepByWallet(walletAddress: string) {
     const wallet = this.normalizeWallet(walletAddress);
 
@@ -27,11 +25,11 @@ export class UserService {
       await this.repo.save(user);
     }
 
-    const isVerified = this.allRequiredPresent(user);
+    const isVerified = Boolean(user.kycGranted || user.kycVerifiedAt) || this.allRequiredPresent(user);
 
     return {
       walletAddress: user.walletAddress,
-      isVerified,      
+      isVerified,
       creditLimit: user.creditLimit ?? null,
     };
   }

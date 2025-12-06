@@ -37,12 +37,7 @@ export function USDCExchangeRateKPI({
   )
 
   return (
-    <div className={`${containerClassName} h-14 px-3 py-1 rounded-lg border border-border/50 bg-card shadow-sm flex flex-col items-center justify-center`}>
-      <div className="flex items-center justify-center mb-2">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <InfoTip contentClassName="font-display text-[11px] leading-snug" label={tooltipContent ?? defaultTooltip} />
-      </div>
-      <div className={`text-sm font-bold leading-none ${valueClassName}`}>{seniorExchangeRateDisplay}</div>
+    <div >
     </div>
   )
 }

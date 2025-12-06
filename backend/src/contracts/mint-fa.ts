@@ -7,6 +7,7 @@ import {
   parseUnitsAptos,
   toU64,
   asArg,
+  DECIMALS,
 } from "./config";
 
 type FQName = `${string}::${string}::${string}`;
@@ -52,27 +53,36 @@ export async function getFaMetadataTriple(params?: {
   const moduleAddress = params?.moduleAddress || getModuleAddress();
   const faObject = params?.faObject || getFaObject();
 
-  const out = await aptos.view({
-    payload: {
-      function: `${moduleAddress}::launchpad::get_fa_object_metadata`,
-      // For views, string address is fine
-      functionArguments: [faObject],
-    },
-  });
+  // Intento leer del view, pero si falla, caigo a fallback con DECIMALS
+  try {
+    const out = await aptos.view({
+      payload: {
+        function: `${moduleAddress}::launchpad::get_fa_object_metadata`,
+        // For views, string address is fine
+        functionArguments: [faObject],
+      },
+    });
 
-  const triple = normalizeTriple(out);
-  if (!triple) throw new Error(`Invalid FA metadata view response: ${JSON.stringify(out)}`);
-
-  const [symbol, name, decimals] = triple;
-  if (!Number.isFinite(decimals) || decimals < 0 || decimals > 38) {
-    throw new Error(`Invalid decimals: ${decimals}`);
+    const triple = normalizeTriple(out);
+    if (triple) {
+      const [symbol, name, decimals] = triple;
+      if (Number.isFinite(decimals) && decimals >= 0 && decimals <= 38) {
+        return { symbol, name, decimals, moduleAddress, faObject };
+      }
+    }
+  } catch {
+    // ignore y sigo al fallback
   }
+
+  const symbol = "WUSDC";
+  const name = "Wrapped USDC";
+  const decimals = DECIMALS;
   return { symbol, name, decimals, moduleAddress, faObject };
 }
 
 export async function getFaDecimals(params?: { moduleAddress?: string; faObject?: string }) {
-  const { decimals } = await getFaMetadataTriple(params);
-  return decimals;
+  const meta = await getFaMetadataTriple(params);
+  return meta.decimals;
 }
 
 export async function getMintFeeSmallest(params: {
@@ -93,7 +103,12 @@ export async function getMintFeeSmallest(params: {
       },
     });
     if (Array.isArray(res)) {
-      if (res.length === 1 && (typeof res[0] === "string" || typeof res[0] === "number" || typeof res[0] === "bigint")) {
+      if (
+        res.length === 1 &&
+        (typeof res[0] === "string" ||
+          typeof res[0] === "number" ||
+          typeof res[0] === "bigint")
+      ) {
         return BigInt(res[0] as any);
       }
       if (Array.isArray(res[0]) && (res[0] as any[]).length === 1) {
@@ -101,12 +116,20 @@ export async function getMintFeeSmallest(params: {
       }
     }
   } catch {
-    // optional view
+    // optional view: si falla, devuelvo null y sigo
   }
   return null;
 }
 
 /* Mint (no generics) */
+/**
+ * OJO: ahora `mintFA` **no** manda ninguna tx on-chain.
+ * Solo:
+ *  - resuelve moduleAddress / faObject
+ *  - calcula amountSmallest (usando DECIMALS por defecto)
+ * Y devuelve esos datos para que el que realmente "paga" sea `transferFA`
+ * desde la private key del admin hacia `to`.
+ */
 export async function mintFA(opts: {
   amountHuman?: string;
   amountSmallest?: bigint;
@@ -114,14 +137,13 @@ export async function mintFA(opts: {
   moduleAddress?: string;
   faObject?: string;
 }) {
-  const admin = getAdmin();
   const moduleAddress = opts.moduleAddress || getModuleAddress();
   const faObject = opts.faObject || getFaObject();
 
   const decimals =
     typeof opts.decimals === "number"
       ? opts.decimals
-      : await getFaDecimals({ moduleAddress, faObject });
+      : DECIMALS;
 
   let amountSmallest: bigint;
   if (opts.amountSmallest != null) {
@@ -132,19 +154,17 @@ export async function mintFA(opts: {
     throw new Error("Provide amountHuman or amountSmallest");
   }
 
-  await getMintFeeSmallest({ amountSmallest, moduleAddress, faObject }).catch(() => null);
-
-  const hash = await signSubmitWait({
-    signer: admin,
-    func: `${moduleAddress}::launchpad::mint_fa` as FQName,
-    // For entry functions, cast to EntryFunctionArgumentTypes
-    functionArguments: [asArg(faObject), asArg(toU64(amountSmallest))],
-  });
+  // Mantengo la shape original del return, pero ya no hay mint on-chain
+  const hash: string | null = null;
 
   return { hash, moduleAddress, faObject, decimals, amountSmallest };
 }
 
 /* Transfer (no generics) */
+/**
+ * Este sí es el que hace el trabajo real:
+ * firma con el admin (APTOS_PRIVATE_KEY) y transfiere FA al `to`.
+ */
 export async function transferFA(opts: {
   to: string;
   amountSmallest: bigint;

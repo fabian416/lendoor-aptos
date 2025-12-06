@@ -11,7 +11,7 @@ type Props = {
 };
 
 // Fixed mint amount (human units)
-const AMOUNT = '100';
+const AMOUNT = '10';
 
 export default function MintUSDCButton({ endpoint, className = '' }: Props) {
   const { account } = useWallet();
@@ -65,7 +65,7 @@ export default function MintUSDCButton({ endpoint, className = '' }: Props) {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ amount: "100" }),
+        body: JSON.stringify({ amount: "10" }),
         signal: ctrl.signal,
       });
 
@@ -100,9 +100,9 @@ export default function MintUSDCButton({ endpoint, className = '' }: Props) {
         'bg-background hover:bg-primary/10 disabled:opacity-50 transition-colors',
         className,
       ].join(' ')}
-      title={account?.address ? 'Mint 100 USDC' : 'Connect a wallet'}
+      title={account?.address ? 'Mint 10 USDC' : 'Connect a wallet'}
     >
-      {loading ? 'Minting…' : 'Mint 100 USDC'}
+      {loading ? 'Minting…' : 'Mint 10 USDC'}
     </button>
   );
 }
